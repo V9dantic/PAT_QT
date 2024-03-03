@@ -65,7 +65,7 @@ class AlgorithmThread(QThread):
     def run(self):
         for i in range(21):
             time.sleep(1)  # Simuliere Algorithmus-Laufzeit mit sleep
-            self.update_progress.emit(i)  # Aktualisiere den Fortschritt
+            self.update_progressUpdated.emit(i)  # Aktualisiere den Fortschritt
 
 # Login Screen
 class LoginScreen(QWidget):
@@ -282,7 +282,9 @@ class LoginScreen(QWidget):
 
 # Choose Screen
 class ChooseScreen(QWidget):
-    def __init__(self):
+    def __init__(self, changeScreenCallback, startAutomationCallback):
+        self.changeScreenCallback = changeScreenCallback
+        self.startAutomationCallback = startAutomationCallback
         super().__init__()
         self.initUI()
 
@@ -362,56 +364,45 @@ class ChooseScreen(QWidget):
     class AutomationThread(QThread):
         progressUpdated = pyqtSignal(int)
         finished = pyqtSignal()
-
+        
         def run(self):
-            for i in range(101):  # Simuliere Fortschritt
-                self.progressUpdated.emit(i)  # Aktualisiere Fortschritt
-                self.msleep(100)  # Warte 100ms für Demonstration
-            self.finished.emit()  # Signalisiere Fertigstellung
+        
+            try:
+                driver.switch_to.parent_frame()
+                self.progressUpdated.emit(10)  # Annahme: 10% Fortschritt
+
+                driver.switch_to.frame("frame_menu")
+                search_address = driver.find_element(By.ID, "button_plugins")
+                search_address.click()
+                self.progressUpdated.emit(30)  # Annahme: 30% Fortschritt
+
+                driver.switch_to.parent_frame()
+                driver.switch_to.frame("frame_main")
+                search_search = driver.find_element(By.XPATH, "/html/body/div[1]")  # Switch Admin (2) und Licensee (1)
+                search_search.click()
+                self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+
+                XPATH = "/html/body/form/table[3]/tbody/tr/td/input[3]"
+
+                try:
+                    elem = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, XPATH)))
+                    self.progressUpdated.emit(70)  # Annahme: 70% Fortschritt
+
+                finally:
+                    search_go = driver.find_element(By.XPATH, XPATH)
+                    search_go.click()
+                    self.progressUpdated.emit(100)  # Annahme: 100% Fortschritt
+                    self.finished.emit()  # Senden eines Erfolgs
+
+            except Exception as e:
+                self.finished.emit(False, str(e))  # Senden eines Fehlerschlags
     
-    class selenium_Worker_closed(QThread):
-        
-    #     progress = pyqtSignal(int)
-    #     finished = pyqtSignal()
-        
-    #     def run(self):
-        
-    #         try:
-    #             self.driver.switch_to.parent_frame()
-    #             self.progress.emit(10)  # Annahme: 10% Fortschritt
-
-    #             self.driver.switch_to.frame("frame_menu")
-    #             search_address = self.driver.find_element(By.ID, "button_plugins")
-    #             search_address.click()
-    #             self.progress.emit(30)  # Annahme: 30% Fortschritt
-
-    #             self.driver.switch_to.parent_frame()
-    #             self.driver.switch_to.frame("frame_main")
-    #             search_search = self.driver.find_element(By.XPATH, "/html/body/div[1]")  # Switch Admin (2) und Licensee (1)
-    #             search_search.click()
-    #             self.progress.emit(50)  # Annahme: 50% Fortschritt
-
-    #             XPATH = "/html/body/form/table[3]/tbody/tr/td/input[3]"
-
-    #             try:
-    #                 elem = WebDriverWait(driver, 10).until(
-    #                 EC.presence_of_element_located((By.XPATH, XPATH)))
-    #                 self.progress.emit(70)  # Annahme: 70% Fortschritt
-
-    #             finally:
-    #                 search_go = driver.find_element(By.XPATH, XPATH)
-    #                 search_go.click()
-    #                 self.progress.emit(100)  # Annahme: 100% Fortschritt
-    #                 self.finished.emit()  # Senden eines Erfolgs
-
-    #         except Exception as e:
-    #             self.finished.emit(False, str(e))  # Senden eines Fehlerschlags
-        pass
     
     
     def claim(self):
-        print("Wechsel zu Loading-Screen")
-        self.parent().setCurrentIndex(8)
+        self.startAutomationCallback()  # Startet die Automation
+        self.changeScreenCallback(8)
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
@@ -1393,7 +1384,7 @@ class LoadingScreen(QWidget):
                 font-family: 'Koldby';
                 color: #333333;
             }
-            QLabel, QProgressBar {
+            QLabel, QProgressBar, QPushButton {
                 font-size: 25px;
                 margin: 5px;
                 font-weight: bold;
@@ -1470,6 +1461,9 @@ class LoadingScreen(QWidget):
         self.timerLabel = QLabel("0 Sekunden")
         self.timerLabel.setAlignment(Qt.AlignCenter)
         self.timerLabel.setMinimumHeight(100)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.updateTimer)
+        self.startTime = 0       
         
         self.progressLayout.addWidget(self.progressBar)
         self.progressLayout.addWidget(self.timerLabel)
@@ -1494,7 +1488,7 @@ class LoadingScreen(QWidget):
         self.applyShadow(cancelButton)
         self.applyShadow(self.nextButton)
         buttonsLayout.addWidget(cancelButton)
-        buttonsLayout.addWidget(self.nextButton)
+        # buttonsLayout.addWidget(self.nextButton)
         buttonsLayout.setSpacing(5)
         
         # Layout-Elemente hinzufügen
@@ -1504,6 +1498,14 @@ class LoadingScreen(QWidget):
         main_layout.setAlignment(middleLayout, Qt.AlignCenter)
         main_layout.setSpacing(50)
         
+    def startTimer(self):
+        self.startTime = 0
+        self.timer.start(1000)
+        
+    def updateTimer(self):
+        self.startTime += 1
+        self.timerLabel.setText(f"{self.startTime} Sekunden")
+        
     # Setter Methoden für die Progress Bar und den "Weiter"-Button
     # Überprüfen!!!
     
@@ -1512,12 +1514,6 @@ class LoadingScreen(QWidget):
         
     def setProgress(self, value):
         self.progressBar.setValue(value)
-
-    def taskCompleted(self):
-        self.progressBar.setValue(100)
-        self.progressLabel.setText("Analyse abgeschlossen.")
-        self.notificationLabel.setText("Bereit zum Weitermachen.")
-        self.nextButton.setEnabled(True)
     
     def setNext(self, index):
         print("Weiter geklickt")
@@ -1543,7 +1539,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stackedWidget)
 
         self.loginScreen = LoginScreen()
-        self.chooseScreen = ChooseScreen()
+        self.chooseScreen = ChooseScreen(self.setCurrentIndex, self.chooseScreenAutomation)
         self.searchScreen = SearchScreen()
         self.claimScreen = ClaimScreen()
         self.finishScreen = FinishScreen()
@@ -1565,7 +1561,6 @@ class MainWindow(QMainWindow):
         ### Hier wird der automatische Login ausgeführt
         
         # Comment out the lines below to use manual login
-        
         try:
             
             # kr_key = keyring.get_password(service_id_key, MAGIC_USERNAME_KEY)
@@ -1614,6 +1609,23 @@ class MainWindow(QMainWindow):
         
     def setCurrentIndex(self, index):
         self.stackedWidget.setCurrentIndex(index)
+        
+    # Methode für den Thread von des Choose Screens
+    
+    def chooseScreenAutomation(self):
+        self.automationThread = self.chooseScreen.AutomationThread()
+        self.automationThread.progressUpdated.connect(self.updateProgress)
+        self.automationThread.finished.connect(self.onAutomationComplete)
+        self.loadingScreen.setRange(100)
+        # Starte die Automation und wechsle zum Ladebildschirm
+        self.automationThread.start()
+        self.loadingScreen.startTimer()
+
+    def updateProgress(self, progress):
+        self.loadingScreen.setProgress(progress)
+
+    def onAutomationComplete(self):
+        self.stackedWidget.setCurrentWidget(self.searchScreen)
 
 
 if __name__ == '__main__':
