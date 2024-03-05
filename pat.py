@@ -1,6 +1,7 @@
 import sys
 import time
 import pandas as pd
+import threading
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect, QMainWindow, QStackedWidget,QSizePolicy, QComboBox, QCheckBox, QSlider, QRadioButton, QFileDialog, QTableWidget, QTableWidgetItem, QProgressBar, QHeaderView
 from PyQt5.QtCore import QEvent, Qt, QSize, QRect, QThread, pyqtSignal, QTimer
@@ -55,17 +56,10 @@ service_id_pass = 'PAT_P'
 service_id_user = 'PAT_U'
 MAGIC_USERNAME_KEY = 'PAT_VA'
 
-# Test Thread
-class AlgorithmThread(QThread):
-    """
-    Dieser Thread wird für die Ausführung des Algorithmus im Hintergrund verwendet.
-    """
-    update_progress = pyqtSignal(int)
+### Laden der Branchen-Tabelle ###
 
-    def run(self):
-        for i in range(21):
-            time.sleep(1)  # Simuliere Algorithmus-Laufzeit mit sleep
-            self.update_progressUpdated.emit(i)  # Aktualisiere den Fortschritt
+branchen = pd.read_excel("sources/Branche_Input.xlsx", index_col=False)
+print(branchen)
 
 # Login Screen
 class LoginScreen(QWidget):
@@ -406,13 +400,17 @@ class ChooseScreen(QWidget):
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
-        self.parent().setCurrentIndex(6)
+        self.parent().setCurrentIndex(7)
 
 # Search Screen
 class SearchScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
+        
+        self.never_claimed_pressed = False
+        self.last_claimed = "---"
+        self.branche_claim = "---"
         
     def initUI(self):
         self.setStyleSheet("""
@@ -457,7 +455,7 @@ class SearchScreen(QWidget):
                 margin: 5px;
                 border: 2px solid #333A73;
                 border-radius: 15px;
-            }
+            }   
             QLabel#title {
                 background-color: #387ADF;
                 color: #FFFFFF;
@@ -479,70 +477,81 @@ class SearchScreen(QWidget):
         # titleLayout.addWidget(title)
         mainLayout.addWidget(title)
 
-        formLayout = QVBoxLayout()
+        self.formLayout = QVBoxLayout()
         
         # Umsatz Eingabefeld
         revenueLayout = QHBoxLayout()
         revenueLabel = QLabel('Umsatz (in Mio.):')
-        revenueMin = QLineEdit()
-        revenueMin.setPlaceholderText('Von')
-        self.applyShadow(revenueMin)
-        revenueMax = QLineEdit()
-        revenueMax.setPlaceholderText('Bis')
-        self.applyShadow(revenueMax)
+        self.revenueMin = QLineEdit()
+        self.revenueMin.setPlaceholderText('Von')
+        self.applyShadow(self.revenueMin)
+        self.revenueMax = QLineEdit()
+        self.revenueMax.setPlaceholderText('Bis')
+        self.applyShadow(self.revenueMax)
         revenueLayout.addWidget(revenueLabel)
-        revenueLayout.addWidget(revenueMin)
-        revenueLayout.addWidget(revenueMax)
-        formLayout.addLayout(revenueLayout)
+        revenueLayout.addWidget(self.revenueMin)
+        revenueLayout.addWidget(self.revenueMax)
+        self.formLayout.addLayout(revenueLayout)
 
         # Mitarbeiter Eingabefeld
         employeeLayout = QHBoxLayout()
         employeeLabel = QLabel('Mitarbeiter:')
-        employeeMin = QLineEdit()
-        employeeMin.setPlaceholderText('Von')
-        self.applyShadow(employeeMin)
-        employeeMax = QLineEdit()
-        employeeMax.setPlaceholderText('Bis')
-        self.applyShadow(employeeMax)
+        self.employeeMin = QLineEdit()
+        self.employeeMin.setPlaceholderText('Von')
+        self.applyShadow(self.employeeMin)
+        self.employeeMax = QLineEdit()
+        self.employeeMax.setPlaceholderText('Bis')
+        self.applyShadow(self.employeeMax)
         employeeLayout.addWidget(employeeLabel)
-        employeeLayout.addWidget(employeeMin)
-        employeeLayout.addWidget(employeeMax)
-        formLayout.addLayout(employeeLayout)
+        employeeLayout.addWidget(self.employeeMin)
+        employeeLayout.addWidget(self.employeeMax)
+        self.formLayout.addLayout(employeeLayout)
 
         # Region Dropdown
         regionLayout = QHBoxLayout()
         regionLabel = QLabel('Region:')
-        regionDropdown = QComboBox()
-        regionDropdown.addItems(['---', 'Europa', 'Asien', 'Nordamerika'])
+        self.regionDropdown = QComboBox()
+        self.regionDropdown.addItems(["---", "Region 1", "Region 2", "Region 3", "Region 4", "Region 5", "Region 6", "Region 7", "Region 8", "Region 9", "Region AT", "Region CH"])
         # Passe größe der Auswahl an, sodass die Element Schriftgröße größer ist
-        regionDropdown.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.applyShadow(regionDropdown)
+        self.regionDropdown.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.applyShadow(self.regionDropdown)
         regionLayout.addWidget(regionLabel)
-        regionLayout.addWidget(regionDropdown)
-        formLayout.addLayout(regionLayout)
+        regionLayout.addWidget(self.regionDropdown)
+        self.formLayout.addLayout(regionLayout)
 
         # Zuletzt geclaimed Dropdown
         claimedLayout = QHBoxLayout()
-        claimedLabel = QLabel('Zuletzt geclaimed:')
-        claimedDropdown = QComboBox()
-        claimedDropdown.addItems(['---', 'Noch nie gelaimed', 'Vor 1 Woche', 'Vor 2 Wochen', 'Vor 3 Wochen', 'Vor 4 Wochen'])
-        self.applyShadow(claimedDropdown)
-        claimedLayout.addWidget(claimedLabel)
-        claimedLayout.addWidget(claimedDropdown)
-        formLayout.addLayout(claimedLayout)
+        claimedbeforeLayout = QHBoxLayout()
+        self.claimedLabel = QLabel('Zuletzt geclaimed:')
+        self.claimedDropdown = QComboBox()
+        self.applyShadow(self.claimedDropdown)
+        self.claimedDropdown.addItems(["---", "3 Monaten", "6 Monaten", "1 Jahr", "3 Jahren", "5 Jahren"])
+        claimedbeforeLayout.addWidget(self.claimedLabel)
+        claimedbeforeLayout.addWidget(self.claimedDropdown)
+        claimedLayout.setSpacing(5)
+        neverClaimedLayout = QHBoxLayout()
+        self.neverClaimedLabel = QLabel('Noch nie gelaimed')
+        self.neverClaimedBox = QCheckBox()
+        neverClaimedLayout.addWidget(self.neverClaimedLabel)
+        neverClaimedLayout.addWidget(self.neverClaimedBox)
+        neverClaimedLayout.setSpacing(5)
+        claimedLayout.addLayout(claimedbeforeLayout)
+        claimedLayout.addLayout(neverClaimedLayout)
+        claimedLayout.setSpacing(5)
+        self.formLayout.addLayout(claimedLayout)
 
         # Branchen Dropdown
         industryLayout = QHBoxLayout()
         industryLabel = QLabel('Branche:')
-        industryDropdown = QComboBox()
-        industryDropdown.addItems(['---', 'Automotive', 'Finanzen', 'Gesundheit', 'Technologie'])
-        self.applyShadow(industryDropdown)
+        self.industryDropdown = QComboBox()
+        self.industryDropdown.addItems(branchen["Name"].tolist())
+        self.applyShadow(self.industryDropdown)
         industryLayout.addWidget(industryLabel)
-        industryLayout.addWidget(industryDropdown)
-        formLayout.addLayout(industryLayout)
+        industryLayout.addWidget(self.industryDropdown)
+        self.formLayout.addLayout(industryLayout)
         
-        formLayout.setSpacing(5)
-        mainLayout.addLayout(formLayout)
+        self.formLayout.setSpacing(5)
+        mainLayout.addLayout(self.formLayout)
 
         buttonsLayout = QHBoxLayout()
         backButton = QPushButton('Zurück')
@@ -566,9 +575,164 @@ class SearchScreen(QWidget):
         shadow.setColor(QColor(0, 0, 0, 60))
         widget.setGraphicsEffect(shadow)
         
-    def weiter(self):
-        print("Weiter geklickt")
+    def automationMethodSearch(self):
+             
+        self.claimedLabel.setStyleSheet("background-color: #50C4ED;")
+        self.neverClaimedLabel.setStyleSheet("background-color: #50C4ED;")
+        
+        # Speichern der aktuellen Auswahl des claimed-Dropdowns
+        self.last_claimed = self.claimedDropdown.currentText()
+        
+        print(self.last_claimed)
+        print(self.neverClaimedBox.isChecked())
+        
+        if self.neverClaimedBox.isChecked() == True and self.last_claimed != "---":
+            self.claimedDropdown.setCurrentIndex(0)
+            self.neverClaimedBox.setChecked(False)
+            
+            # Färbe das Dropdown Label und das "Noch nie geclaimed" Label rot
+            self.claimedLabel.setStyleSheet("background-color: #990000;")
+            self.neverClaimedLabel.setStyleSheet("background-color: #990000;")
+                      
+            return
+        
+        # Speichern der Werte der Eingabefelder
+        
+        min_turn = self.revenueMin.text()
+        max_turn = self.revenueMax.text()
+        min_emp = self.employeeMin.text()
+        max_emp = self.employeeMax.text()
+        
+        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[1]/td[2]/input[1]"
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.clear()
+        search_settings.send_keys(min_turn)
+
+        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[1]/td[2]/input[2]"
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.clear()
+        search_settings.send_keys(max_turn)
+
+        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[2]/td[2]/input[1]"
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.clear()
+        search_settings.send_keys(min_emp)
+
+        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[2]/td[2]/input[2]"
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.clear()
+        search_settings.send_keys(max_emp)
+
+        region_input = self.regionDropdown.currentText()
+        
+        if region_input == "---":
+            
+            XPATH = "//*[@id=\"address_category4\"]/option[1]"
+            
+        else:
+            
+            region_input = str(region_input.split(" ")[1])
+            
+            if region_input == "AT":
+            
+                XPATH = "//*[@id=\"address_category4\"]/option[11]"
+                
+            elif region_input == "CH":
+            
+                XPATH = "//*[@id=\"address_category4\"]/option[12]"
+                
+            else:
+                region_input = int(region_input)+1
+                XPATH = f"//*[@id=\"address_category4\"]/option[{str(region_input)}]"
+        
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.click()
+        
+        # Check for the box "Noch nie geclaimed"
+        if  self.neverClaimedBox.isChecked() == False:
+            
+            if self.never_claimed_pressed == True:
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/input"
+                search_settings = driver.find_element(By.XPATH, XPATH)
+                print("Hit")
+                search_settings.click()
+                self.never_claimed_pressed = False
+            
+            if self.last_claimed == "3 Monaten":
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[2]"
+                
+            elif self.last_claimed == "6 Monaten":
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[3]"
+                
+            elif self.last_claimed == "1 Jahr":
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[4]"
+                
+            elif self.last_claimed == "3 Jahren":
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[5]"
+                
+            elif self.last_claimed == "5 Jahren":
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[5]"
+                
+            else:
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[1]"
+                
+            search_settings = driver.find_element(By.XPATH, XPATH)
+            print(search_settings.get_attribute("value"))
+            search_settings.click()
+            
+        else:
+            
+            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[1]"
+            search_settings = driver.find_element(By.XPATH, XPATH)
+            search_settings.click()
+            
+            if self.never_claimed_pressed == False:
+                
+                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/input"
+                search_settings = driver.find_element(By.XPATH, XPATH)
+                search_settings.click()
+                self.never_claimed_pressed = True
+            
+        self.branche = self.industryDropdown.currentText()
+        self.branche_claim = self.branche_claim
+        
+        if self.branche != "---":
+        
+            branche = branchen[branchen["Name"]==self.branche]
+            
+            left = int(branche["Branche_l"].values)
+            left = str(left)
+            
+            right = int(branche["Branche_r"].values)
+            right = right - 1
+            right = str(right)
+
+            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[2]/table/tbody/tr[1]/td[2]/input[1]"
+            search_settings = driver.find_element(By.XPATH, XPATH)
+            search_settings.clear()
+            search_settings.send_keys(left)
+
+            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[2]/table/tbody/tr[1]/td[2]/input[2]"
+            search_settings = driver.find_element(By.XPATH, XPATH)
+            search_settings.clear()
+            search_settings.send_keys(right)
+
+        XPATH = "/html/body/form/table[3]/tbody/tr/td/button"
+        search_settings = driver.find_element(By.XPATH, XPATH)
+        search_settings.click()
+        
         self.parent().setCurrentIndex(3)
+        
+    def weiter(self):
+        self.methodThread = threading.Thread(target=self.automationMethodSearch)
+        self.methodThread.start()
         
     def back(self):
         print("Zurück geklickt")
@@ -661,7 +825,7 @@ class ClaimScreen(QWidget):
         # Slider zur Auswahl der Anzahl der Prospects
         self.slider = QSlider()
         self.slider.setOrientation(Qt.Horizontal)
-        self.slider.setMinimum(1)
+        self.slider.setMinimum(0)
         self.slider.setMaximum(50)
         self.slider.setTickPosition(QSlider.TicksBelow)
         self.slider.setTickInterval(5)
@@ -1514,10 +1678,12 @@ class LoadingScreen(QWidget):
         
     def setProgress(self, value):
         self.progressBar.setValue(value)
-    
-    def setNext(self, index):
-        print("Weiter geklickt")
-        self.parent().setCurrentIndex(index)
+        
+    def setLableProgressLabel(self, text):
+        self.progressLabel.setText(text)
+        
+    def setNotificationLabel(self, text):
+        self.notificationLabel.setText(text)
     
     def applyShadow(self, widget):
         shadow = QGraphicsDropShadowEffect()
@@ -1563,11 +1729,9 @@ class MainWindow(QMainWindow):
         # Comment out the lines below to use manual login
         try:
             
-            # kr_key = keyring.get_password(service_id_key, MAGIC_USERNAME_KEY)
             kr_user = keyring.get_password(service_id_user, MAGIC_USERNAME_KEY)
             kr_pw = keyring.get_password(service_id_pass, MAGIC_USERNAME_KEY)
                         
-            # if ((keys["Partner"]==kr_user) & (keys["Key"]==kr_key)).any():
             if (keys["Partner"]==kr_user).any():
                 
                 try:
@@ -1597,26 +1761,26 @@ class MainWindow(QMainWindow):
                     self.stackedWidget.setCurrentIndex(1)
                         
                 except: 
-                    
-                    # searchLMM.click()
                     search_mandant.clear()
                     search_email.clear()
                     search_passwort.clear()
                     
         except:
-            
             print("Kein Passwort gefunden!")
         
     def setCurrentIndex(self, index):
         self.stackedWidget.setCurrentIndex(index)
         
     # Methode für den Thread von des Choose Screens
-    
     def chooseScreenAutomation(self):
         self.automationThread = self.chooseScreen.AutomationThread()
         self.automationThread.progressUpdated.connect(self.updateProgress)
         self.automationThread.finished.connect(self.onAutomationComplete)
         self.loadingScreen.setRange(100)
+        self.loadingScreen.setLableProgressLabel("PAT lädt nun das Licensee-Plugin...")
+        self.loadingScreen.setNotificationLabel("Dies kann einige Sekunden dauern...")
+        self.loadingScreen.setProgress(0)
+        self.setCurrentIndex(8)
         # Starte die Automation und wechsle zum Ladebildschirm
         self.automationThread.start()
         self.loadingScreen.startTimer()
