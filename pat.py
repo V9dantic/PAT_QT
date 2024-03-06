@@ -1399,29 +1399,29 @@ class ClaimScreen(QWidget):
                         total_len = total_len - 1
                 
                 if self.check_before_claim:
-                    self.progressUpdated.emit(30 + int((i / start_len) * 60))           
+                    self.progressUpdated.emit(30 + int((i / start_len) * 50))           
                 else:
                     self.progressUpdated.emit(30 + int((i / start_len) * 40))
             
             if self.check_before_claim:        
-                self.progressUpdated.emit(90)
+                self.progressUpdated.emit(80)
             else:
                 self.progressUpdated.emit(70)
             
             mothers, daughters, repeat, new_start, total_len, adjust = mother_search(start_len, total_len, daughters, mothers, adjust)
             
             if self.check_before_claim:
-                self.progressUpdated.emit(95)
+                self.progressUpdated.emit(85)
             else:
-                self.progressUpdated.emit(80)
+                self.progressUpdated.emit(75)
             while repeat == True:
                 
                 mothers, daughters, repeat, new_start, total_len, adjust = mother_search(new_start, total_len, daughters, mothers, adjust)
             
             if self.check_before_claim:
-                self.progressUpdated.emit(99)
-                self.finished.emit(anzahl_prospects)    
-            self.progressUpdated.emit(80)
+                self.progressUpdated.emit(90)
+            else:
+                self.progressUpdated.emit(80)
                 
             grandclaim = []
             tables = {}
@@ -1506,7 +1506,8 @@ class ClaimScreen(QWidget):
             self.sendClaimedDf.emit(claimLog)
                     
             tabs = driver.window_handles
-                    
+            
+            counter = 1        
             for i in tabs:
 
                 driver.switch_to.window(i)
@@ -1525,6 +1526,11 @@ class ClaimScreen(QWidget):
                         except:
                             
                             print("Kein Vorgang")
+                            
+                    if self.check_before_claim:
+                        self.progressUpdated.emit(90 + int((counter / (len(tabs)-1)) * 10))
+                    else:
+                        self.progressUpdated.emit(80 + int((counter / (len(tabs)-1)) * 10))
                                     
             self.anzahl_prospects = anzahl_prospects - len(daughters_with_claimed_mothers)
             self.prospects_geclaimt = self.anzahl_prospects
@@ -1572,7 +1578,7 @@ class ClaimScreen(QWidget):
                             
                         clicker("/html/body/form/table[2]/tbody/tr[8]/td[2]/input[1]")
                         
-                    self.progressUpdated.emit(80 + int((counter / self.anzahl_prospects) * 20))
+                    self.progressUpdated.emit(90 + int((counter / self.anzahl_prospects) * 10))
                     counter = counter + 1
 
                 self.finished.emit()
@@ -2384,7 +2390,7 @@ class ApScreen(QWidget):
 
         template.to_excel(f"{self.folderName}/CVR_Import_APs_{export_date}.xlsx", index=False)
 
-        # claimLog.to_excel(f"{save}/Claimed_Prospects_Protokoll_{export_date}.xlsx", index=False)
+        self.claimedDf.to_excel(f"{self.folderName}/Claimed_Prospects_Protokoll_{export_date}.xlsx", index=False)
         
         # Benachrichtigung, dass der Export abgeschlossen und die Datei gespeichert wurde. Dabei soll das Label zusätzlich noch den Pfad zur Datei anzeigen. Es soll rot markiert sein, damit es auffällt.
         self.title.setText(f'Der Export wurde erfolgreich abgeschlossen! Die Datei wurde unter folgendem Pfad gespeichert: {self.folderName}/CVR_Import_APs_{export_date}.xlsx')
@@ -2885,11 +2891,11 @@ class MainWindow(QMainWindow):
         self.searchScreen = SearchScreen()
         self.claimScreen = ClaimScreen(self.setCurrentIndex, self.claimScreenAutomation)
         self.finishScreen = FinishScreen()
-        self.ExportScreen = ExportScreen()
-        self.ApScreen = ApScreen()
-        self.ExportScreen.sendFilePath.connect(self.ApScreen.receiveFilePath)
-        self.ExportScreen.sendAPAge.connect(self.ApScreen.receiveAPAge)
-        self.searchScreen.sendBranche.connect(self.ApScreen.receiveBranche)
+        self.exportScreen = ExportScreen()
+        self.apScreen = ApScreen()
+        self.exportScreen.sendFilePath.connect(self.apScreen.receiveFilePath)
+        self.exportScreen.sendAPAge.connect(self.apScreen.receiveAPAge)
+        self.searchScreen.sendBranche.connect(self.apScreen.receiveBranche)
         self.unclaimScreen = UnclaimScreen(self.setCurrentIndex, self.unclaimScreenAutomation)
         self.loadingScreen = LoadingScreen()
 
@@ -2898,8 +2904,8 @@ class MainWindow(QMainWindow):
         self.stackedWidget.addWidget(self.searchScreen)
         self.stackedWidget.addWidget(self.claimScreen)
         self.stackedWidget.addWidget(self.finishScreen)
-        self.stackedWidget.addWidget(self.ExportScreen)
-        self.stackedWidget.addWidget(self.ApScreen)
+        self.stackedWidget.addWidget(self.exportScreen)
+        self.stackedWidget.addWidget(self.apScreen)
         self.stackedWidget.addWidget(self.unclaimScreen)
         self.stackedWidget.addWidget(self.loadingScreen)
         
@@ -2979,6 +2985,7 @@ class MainWindow(QMainWindow):
         self.automationThread = self.claimScreen.AutomationThread_S(self.get_last_claimed(), int(self.claimScreen.value_label.text()), self.claimScreen.check_before_claim.isChecked(), self.claimScreen.action_text.text())
         self.automationThread.progressUpdated.connect(self.updateProgress)
         self.automationThread.finished.connect(self.onAutomationComplete_claim)
+        self.automationThread.sendClaimedDf.connect(self.apScreen.receiveClaimedDf)
         self.loadingScreen.setRange(100)
         self.loadingScreen.setLableProgressLabel("PAT analysiert nun die Prospects...")
         self.loadingScreen.setNotificationLabel("Dies kann einige Minuten dauern...")
