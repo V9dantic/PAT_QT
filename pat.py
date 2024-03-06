@@ -63,19 +63,25 @@ print(branchen)
 ### Methode zum Zählen der gefundenen Prospects ###
 def get_prospects(): 
     
-    ### Surround with try
+    try:
+        
+        ### Surround with try
 
-    XPATH = "/html/body/form/table[4]/tbody/tr/td"
-    total = driver.find_element(By.XPATH, XPATH)
+        XPATH = "/html/body/form/table[4]/tbody/tr/td"
+        total = driver.find_element(By.XPATH, XPATH)
 
-    text = total.text
-    text = text.split("von")[1]
-    text = text.strip()
-    text = int(text)
-    text = text*50
+        text = total.text
+        text = text.split("von")[1]
+        text = text.strip()
+        text = int(text)
+        text = text*50
 
-    return text
+        return text
 
+    except:
+        
+        return 0
+    
 ### Clicker-Methode für das klicken von Buttons mit Selenium ###
 def clicker(XPATH):
     
@@ -577,7 +583,7 @@ class ChooseScreen(QWidget):
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
-        self.parent().setCurrentIndex(7)
+        self.parent().setCurrentIndex(5)
 
 # Search Screen
 class SearchScreen(QWidget):
@@ -1142,7 +1148,6 @@ class ClaimScreen(QWidget):
         
         # Konstruktor zum übergeben von Parametern
         def __init__(self, last_claimed, value_label, check_before_claim, action_text):
-            # super().__init__()
             QThread.__init__(self)
             self.last_claimed = last_claimed
             self.value_label = value_label
@@ -1161,7 +1166,7 @@ class ClaimScreen(QWidget):
             table_prospects = driver.find_element(By.XPATH, XPATH)
             prospects = table_prospects.find_elements(By.TAG_NAME, "tr")
             
-            counter = 0
+            counter = 1
             for row in prospects:
                 if anzahl_tabs == self.maxClaims:
                     break
@@ -1375,19 +1380,30 @@ class ClaimScreen(QWidget):
                         driver.close()
                         adjust += 1
                         total_len = total_len - 1
-                                
-                self.progressUpdated.emit(30 + int((i / start_len) * 40))           
+                
+                if self.check_before_claim:
+                    self.progressUpdated.emit(30 + int((i / start_len) * 60))           
+                else:
+                    self.progressUpdated.emit(30 + int((i / start_len) * 40))
             
-            self.progressUpdated.emit(70)
+            if self.check_before_claim:        
+                self.progressUpdated.emit(90)
+            else:
+                self.progressUpdated.emit(70)
             
             mothers, daughters, repeat, new_start, total_len, adjust = mother_search(start_len, total_len, daughters, mothers, adjust)
             
-            self.progressUpdated.emit(75)
-
+            if self.check_before_claim:
+                self.progressUpdated.emit(95)
+            else:
+                self.progressUpdated.emit(80)
             while repeat == True:
                 
                 mothers, daughters, repeat, new_start, total_len, adjust = mother_search(new_start, total_len, daughters, mothers, adjust)
-                
+            
+            if self.check_before_claim:
+                self.progressUpdated.emit(99)
+                self.finished.emit(anzahl_prospects)    
             self.progressUpdated.emit(80)
                 
             grandclaim = []
@@ -1508,7 +1524,7 @@ class ClaimScreen(QWidget):
                 ## Hier werden nun die gefundenen Prospects geclaimed und deren Vorgänge gepflegt
 
                 tabs = driver.window_handles
-                counter = 0
+                counter = 1
 
                 for i in tabs:
                     driver.switch_to.window(i)
@@ -1545,24 +1561,32 @@ class ClaimScreen(QWidget):
         
     class AutomationThread_W(QThread):
         progressUpdated = pyqtSignal(int)
-        finished = pyqtSignal()
+        finished = pyqtSignal(int)
         
         def __init__(self, last_claimed, action_text, status_text):
+            QThread.__init__(self)
             self.last_claimed = last_claimed
             self.action_text = action_text
             self.status_text = status_text
             
         def run(self):
-            
+                        
             driver.switch_to.window(driver.window_handles[0])
             self.anzahl_prospects = len(driver.window_handles) - 1
             
             ### Hier werden nun die gefundenen Prospects geclaimed und deren Vorgänge gepflegt
 
             tabs = driver.window_handles
+            
+            if len(tabs) == 1:
+                
+                self.finished.emit()
+                return
 
+            
+            counter = 1
+            
             for i in tabs:
-                counter = 0
                 driver.switch_to.window(i)
 
                 if i != driver.window_handles[0]:
@@ -1587,7 +1611,7 @@ class ClaimScreen(QWidget):
                     
                     XPATH = "/html/body/form/table[2]/tbody/tr[1]/td[2]/textarea"
                     text = driver.find_element(By.XPATH, XPATH)
-                    text.send_keys(self.aktion.text)
+                    text.send_keys(self.action_text)
                     
                     clicker("//*[@id=\"holdfile_vs_appointment_empty\"]")
                     clicker("/html/body/form/table[2]/tbody/tr[10]/td[2]/input[1]")
@@ -1602,8 +1626,9 @@ class ClaimScreen(QWidget):
                     clicker("/html/body/form/table[2]/tbody/tr[8]/td[2]/input[1]")
                     
                 self.progressUpdated.emit(int(counter/self.anzahl_prospects) * 100)
+                counter = counter + 1
                 
-            self.finished.emit()
+            self.finished.emit(self.anzahl_prospects)
     
     def on_back(self):
         # Logik, die ausgeführt wird, wenn der Zurück-Button geklickt wird
@@ -1686,11 +1711,11 @@ class FinishScreen(QWidget):
         self.setLayout(mainLayout)
         
         titleLayout = QVBoxLayout()
-        title = QLabel('Es wurden 20 neue Prospects geclaimt!')
-        title.setObjectName('title')
-        title.setAlignment(Qt.AlignCenter)
-        title.setMinimumHeight(100)
-        titleLayout.addWidget(title)
+        self.title = QLabel('Es wurden 20 neue Prospects geclaimt!')
+        self.title.setObjectName('title')
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setMinimumHeight(100)
+        titleLayout.addWidget(self.title)
         mainLayout.addLayout(titleLayout)
         
         # Weitere Prospects Button
@@ -2518,6 +2543,7 @@ class MainWindow(QMainWindow):
             # Setze den Weiter-Button auf enabled und ändere die Hintergrundfarbe und die beiden anderen Buttons auf disabled und grau
             self.claimScreen.weiter_button.setEnabled(True)
             self.claimScreen.weiter_button.setStyleSheet("background-color: #387ADF; color: white;")
+            self.claimScreen.weiter_button.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
             self.claimScreen.start_button.setEnabled(False)
             self.claimScreen.start_button.setStyleSheet("background-color: #AAAAAA; color: white;")
             self.claimScreen.back_button.setEnabled(False)
@@ -2530,9 +2556,11 @@ class MainWindow(QMainWindow):
             self.stackedWidget.setCurrentWidget(self.claimScreen)
         else:
             self.stackedWidget.setCurrentWidget(self.finishScreen)    
-        
-    def onAutomationComplete_claim_weiter(self):
+    
+    @pyqtSlot(int)    
+    def onAutomationComplete_claim_weiter(self, result):
         self.stackedWidget.setCurrentWidget(self.finishScreen)
+        self.finishScreen.title.setText(f"Es wurden {result} Prospects geclaimt!")
         
     ### Methoden für den Loading Screen ###
     def updateProgress(self, progress):
