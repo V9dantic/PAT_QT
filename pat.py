@@ -2,6 +2,7 @@ import sys
 import time
 import pandas as pd
 import threading
+import datetime as dt
 from datetime import datetime, timedelta
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect, QMainWindow, QStackedWidget,QSizePolicy, QComboBox, QCheckBox, QSlider, QRadioButton, QFileDialog, QTableWidget, QTableWidgetItem, QProgressBar, QHeaderView
@@ -583,10 +584,13 @@ class ChooseScreen(QWidget):
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
-        self.parent().setCurrentIndex(5)
+        self.parent().setCurrentIndex(7)
 
 # Search Screen
 class SearchScreen(QWidget):
+    
+    sendBranche = pyqtSignal(str)
+    
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -786,6 +790,9 @@ class SearchScreen(QWidget):
         min_emp = self.employeeMin.text()
         max_emp = self.employeeMax.text()
         
+        # driver.switch_to.parent_frame()
+        # driver.switch_to.frame("frame_menu")
+        
         XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[1]/td[2]/input[1]"
         search_settings = driver.find_element(By.XPATH, XPATH)
         search_settings.clear()
@@ -884,7 +891,8 @@ class SearchScreen(QWidget):
                 self.never_claimed_pressed = True
             
         self.branche = self.industryDropdown.currentText()
-        self.branche_claim = self.branche_claim
+        self.sendBranche.emit(self.branche)
+        # self.branche_claim = self.branche_claim
         
         if self.branche != "---":
         
@@ -918,11 +926,15 @@ class SearchScreen(QWidget):
         self.methodThread.start()
         
     def back(self):
-        print("Zurück geklickt")
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
+        clicker("/html/body/form/div/ul/li[1]")
+        
         self.parent().setCurrentIndex(1)
 
 #Claim Screen        
 class ClaimScreen(QWidget):
+    
     def __init__(self, changeScreenCallback, startAutomationCallback):
         self.changeScreenCallback = changeScreenCallback
         self.startAutomationCallback = startAutomationCallback
@@ -1145,6 +1157,7 @@ class ClaimScreen(QWidget):
     class AutomationThread_S(QThread):
         progressUpdated = pyqtSignal(int)
         finished = pyqtSignal(int)
+        sendClaimedDf = pyqtSignal(pd.DataFrame)
         
         # Konstruktor zum übergeben von Parametern
         def __init__(self, last_claimed, value_label, check_before_claim, action_text):
@@ -1165,6 +1178,10 @@ class ClaimScreen(QWidget):
 
             table_prospects = driver.find_element(By.XPATH, XPATH)
             prospects = table_prospects.find_elements(By.TAG_NAME, "tr")
+            
+            if self.maxClaims == 0:
+                self.finished.emit(0)
+                return
             
             counter = 1
             for row in prospects:
@@ -1485,6 +1502,8 @@ class ClaimScreen(QWidget):
                 print("Keine geclaimten Mütter")
                 
             print(claimLog)
+            
+            self.sendClaimedDf.emit(claimLog)
                     
             tabs = driver.window_handles
                     
@@ -1580,7 +1599,7 @@ class ClaimScreen(QWidget):
             
             if len(tabs) == 1:
                 
-                self.finished.emit()
+                self.finished.emit(0)
                 return
 
             
@@ -1767,19 +1786,80 @@ class FinishScreen(QWidget):
         widget.setGraphicsEffect(shadow)
         
     def more(self):
-        print("Weitere Prospects claimen")
+        
+        tabs = driver.window_handles
+
+        for i in tabs:
+
+            driver.switch_to.window(i)
+
+            if i != driver.window_handles[0]:
+                
+                driver.close()
+        
+        driver.switch_to.window(driver.window_handles[0])
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
         self.parent().setCurrentIndex(2)
         
     def export(self):
-        print("Ansprechpartner exportieren")
+        
+        tabs = driver.window_handles
+
+        for i in tabs:
+
+            driver.switch_to.window(i)
+
+            if i != driver.window_handles[0]:
+                
+                driver.close()
+        
+        driver.switch_to.window(driver.window_handles[0])
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
+        search_address = driver.find_element(By.ID, "button_plugins")
+        search_address.click()
+
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_main")
+        XPATH = "/html/body/div[1]"
+        search_search = driver.find_element(By.XPATH, XPATH)
+        search_search.click()
+        
+        clicker("/html/body/form/table[3]/tbody/tr/td/a[2]")
+        clicker("/html/body/form/table[2]/tbody/tr[1]/td[2]/input[1]")
+        clicker("/html/body/form/table[2]/tbody/tr[2]/td[2]/input")
+        clicker("/html/body/form/table[2]/tbody/tr[3]/td[2]/input")
+        clicker("/html/body/form/center/table/tbody/tr/td/table/tbody/tr/td/table[2]/tbody/tr[2]/td/input[4]")
+        clicker("/html/body/form/center/table/tbody/tr/td/table/tbody/tr/td/table[2]/tbody/tr[3]/td/button")
+
         self.parent().setCurrentIndex(5)
         
     def back(self):
-        print("Zurück geklickt")
+        
+        tabs = driver.window_handles
+
+        for i in tabs:
+
+            driver.switch_to.window(i)
+
+            if i != driver.window_handles[0]:
+                
+                driver.close()
+                
+        driver.switch_to.window(driver.window_handles[0])
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
+        clicker("/html/body/form/div/ul/li[1]")
+        
         self.parent().setCurrentIndex(1) 
 
 # Export Screen
 class ExportScreen(QWidget):
+    
+    sendFilePath = pyqtSignal(str)
+    sendAPAge = pyqtSignal(str)
+    
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -1867,11 +1947,11 @@ class ExportScreen(QWidget):
         
         claimedLayout = QHBoxLayout()
         claimedLabel = QLabel('Geclaimt vor:')
-        claimedDropdown = QComboBox()
-        claimedDropdown.addItems(['---', 'Heute', 'Gestern', 'Vorgestern'])
-        self.applyShadow(claimedDropdown)
+        self.claimedDropdown = QComboBox()
+        self.claimedDropdown.addItems(["---", "Heute", "1 Woche", "1 Monat", "3 Monaten", "6 Monaten", "1 Jahr"])
+        self.applyShadow(self.claimedDropdown)
         claimedLayout.addWidget(claimedLabel)
-        claimedLayout.addWidget(claimedDropdown)
+        claimedLayout.addWidget(self.claimedDropdown)
         claimedLayout.setSpacing(5)
         self.formLayout.addLayout(claimedLayout)
         
@@ -1906,14 +1986,18 @@ class ExportScreen(QWidget):
         shadow.setYOffset(0)
         shadow.setColor(QColor(0, 0, 0, 50))
         widget.setGraphicsEffect(shadow)
-        
+    
+    # def sendFilePath(self, path):
+    #     self.sendFilePath.emit(path)
+    
     def openFileDialog(self):
         print("Datei öffnen")
         options = QFileDialog.Options()
-        fileName, _ = QFileDialog.getOpenFileName(self, "Datei öffnen", "",
+        self.fileName, _ = QFileDialog.getOpenFileName(self, "Datei öffnen", "",
                                                   "Alle Dateien (*);;Textdateien (*.txt)", options=options)
-        if fileName:
-            print(fileName)
+        if self.fileName:
+            print(self.fileName)
+            self.sendFilePath.emit(self.fileName)
         
         # Disable the button after the file has been selected
         self.nextButton.setEnabled(True)
@@ -1923,10 +2007,13 @@ class ExportScreen(QWidget):
         
     def export(self):
         print("Ansprechpartner exportieren")
+        self.sendAPAge.emit(self.claimedDropdown.currentText())
         self.parent().setCurrentIndex(6)
         
     def back(self):
-        print("Zurück geklickt")
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
+        clicker("/html/body/form/div/ul/li[1]")
         self.parent().setCurrentIndex(1)
 
 # AP Screen
@@ -2012,18 +2099,22 @@ class ApScreen(QWidget):
                 border: 2px solid #333A73;
                 background: #387ADF;
             }
+            QTableWidget::item:selected {
+                background-color: #387ADF;
+                color: #FFFFFF;
+            }
         """)
         
         mainLayout = QVBoxLayout()
         self.setLayout(mainLayout)
         
         titleLayout = QVBoxLayout()
-        title = QLabel('Wähle nun aus welche der unten aufgeführten Funktionen die APS im Unternehmen haben dürfen! Wähle anschließend einen Speicherort aus, damit PAT Deine neuen Ansprechpartner berechnen kann und diese dort abspeichern kann:')
-        title.setWordWrap(True)
-        title.setObjectName('title')
-        title.setAlignment(Qt.AlignCenter)
-        title.setMinimumHeight(100)
-        titleLayout.addWidget(title)
+        self.title = QLabel('Wähle nun aus welche der unten aufgeführten Funktionen die APS im Unternehmen haben dürfen! Wähle anschließend einen Speicherort aus, damit PAT Deine neuen Ansprechpartner berechnen kann und diese dort abspeichern kann:')
+        self.title.setWordWrap(True)
+        self.title.setObjectName('title')
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setMinimumHeight(100)
+        titleLayout.addWidget(self.title)
         mainLayout.addLayout(titleLayout)
         
         # Weitere Ansprechpartner Button
@@ -2056,31 +2147,94 @@ class ApScreen(QWidget):
         
         # Ein Button um den Vorgang abzubrechen und zurück zu gehen
         
-        backButton = QPushButton('Zurück')
-        self.applyShadow(backButton)
-        mainLayout.addWidget(backButton)
-        backButton.clicked.connect(self.back)
+        self.backButton = QPushButton('Zurück')
+        self.applyShadow(self.backButton)
+        mainLayout.addWidget(self.backButton)
+        self.backButton.clicked.connect(self.back)
         
         mainLayout.setSpacing(75)
-
-        self.fillTable()
         self.resizeTable()
 
-    def fillTable(self):
-        for i in range(5):  # 5 Zeilen als Beispiel
-            checkBox = QCheckBox()
-            hLayout = QHBoxLayout()
-            hLayout.addWidget(checkBox)
-            hLayout.setAlignment(Qt.AlignCenter)
-            hLayout.setContentsMargins(0,0,0,0)
+    def on_enter(self):
+        export = pd.read_excel(self.filePath, index_col=False)
+        import_date = dt.datetime.today()
+        
+        print(self.age)
+        
+        if self.age == "Heute":
+            import_date = import_date + dt.timedelta(days=360-1)
+        
+        if self.age == "1 Woche":
+            import_date = import_date + dt.timedelta(days=360-8)
+            
+        elif self.age == "1 Monat":
+            import_date = import_date + dt.timedelta(days=360-31)
+            
+        elif self.age == "3 Monaten":
+            import_date = import_date + dt.timedelta(days=360-91) 
+            
+        elif self.age == "6 Monaten":
+            import_date = import_date + dt.timedelta(days=360-121) 
+            
+        elif self.age == "1 Jahr":
+            import_date = import_date + dt.timedelta(days=360-361)
+            
+        export["Claim-Ende"] = pd.to_datetime(export["Claim-Ende"], format="%d.%m.%Y", dayfirst=False)
+        export = export[export["Claim-Ende"] >= import_date]
 
-            widget = QWidget()
-            widget.setLayout(hLayout)
+        choose_function = []
 
-            self.tableWidget.setRowCount(i + 1)
-            self.tableWidget.setCellWidget(i, 0, widget)  # Fügt die Checkbox zur ersten Spalte hinzu
-            self.tableWidget.setItem(i, 1, QTableWidgetItem(f"Item {i+1}"))  # Name
-            self.tableWidget.setItem(i, 2, QTableWidgetItem(f"Beschreibung {i+1}"))  # Beschreibung
+        cF = export[export["Funktion"].notna()]
+
+        for funk in cF["Funktion"]:
+            
+            for f in str(funk).split(","):
+                
+                f = f.lstrip()
+                f = f.rstrip()
+                
+                if not f in choose_function:
+                    
+                    choose_function.append(f)     
+                    
+        self.cF = pd.DataFrame(choose_function, columns=["Funktion"])
+        self.cF.sort_values(by="Funktion", inplace=True)
+        
+        # Setzen der Tabelle Dimension
+        self.tableWidget.setRowCount(self.cF.shape[0])
+        self.tableWidget.setColumnCount(self.cF.shape[1])
+
+        # Füllen des QTableWidget mit Daten aus dem DataFrame
+        for i in range(self.cF.shape[0]):
+            for j in range(self.cF.shape[1]):
+                self.tableWidget.setItem(i, j, QTableWidgetItem(str(self.cF.iloc[i, j])))
+
+        # Setzen der Spaltenüberschriften
+        self.tableWidget.setHorizontalHeaderLabels(self.cF.columns)
+        # Erlauben der Zeilenauswahl
+        self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
+        # Erlauben der Auswahl von mehreren Zeilen
+        self.tableWidget.setSelectionMode(QTableWidget.MultiSelection)
+        
+    def receiveFilePath(self, filePath):
+        # Verarbeiten Sie den empfangenen Dateipfad
+        print(f"Empfangener Dateipfad: {filePath}")
+        self.filePath = filePath
+        
+    def receiveAPAge(self, age):
+        # Verarbeiten Sie das empfangene Alter
+        print(f"Empfangenes Alter: {age}")
+        self.age = age
+        
+    def receiveBranche(self, branche):
+        # Verarbeiten Sie die empfangene Branche
+        print(f"Empfangene Branche: {branche}")
+        self.branche = branche
+        
+    def receiveClaimedDf(self, claimedDf):
+        # Verarbeiten Sie das empfangene DataFrame
+        print(f"Empfangenes DataFrame: {claimedDf}")
+        self.claimedDf = claimedDf
             
     def resizeTable(self):
         self.tableWidget.resizeColumnsToContents()
@@ -2102,6 +2256,7 @@ class ApScreen(QWidget):
         folderName = QFileDialog.getExistingDirectory(self, "Speicherort auswählen", options=options)
         if folderName:
             print(folderName)
+            self.folderName = folderName
         
         # Aktivieren des "Berechnen"-Buttons
         self.exportButton.setEnabled(True)
@@ -2109,16 +2264,146 @@ class ApScreen(QWidget):
         self.exportButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
     
     def export(self):
-        print("Berechnen")
-        self.parent().setCurrentIndex(1)
-    
+        print("---------------------------------------------------------")
+        print("Speicherort = " + self.folderName)
+        print("---------------------------------------------------------")
+        
+        ### Einlesen des neuen datas
+        export = pd.read_excel(self.filePath, index_col=False)
+        template = pd.DataFrame(columns = ['Organisation (Unternehmen)', 'Straße', 'PLZ', 'Ort', 'Anrede', 'Vorname', 'Nachname', 'Position', 'Telefon Zentrale', 'Telefon direkt 1', 'Telefon direkt 2', 'Pers. E-Mail', 'E-Mail Unternehmen', 'Webseite Unternehmen', 'Duns-Nummer', 'Industrie', 'Ihre ID', 'Notizen', 'Datum eingeliefert', 'CVR Media Import'])
+        data = pd.DataFrame()
+        funktionen = [item.text() for item in self.tableWidget.selectedItems()]
+        
+        
+        firmen = export["Firmenname"].unique()
+        options = funktionen
+
+        for firma in firmen:
+            
+            akt = export[export["Firmenname"] == firma]
+            
+            if len(akt)<=1:
+                
+                data = pd.concat([data, akt])
+                    
+            else:
+                
+                ceo = akt[akt["Leitungsebene"]=="Top-Management"]
+                ceo = ceo[ceo["Visitenkarten-Info"].str.contains("Geschäfts", na=False)]
+                ceo.sort_values(by="Visitenkarten-Info", ascending=True, inplace=True)
+                
+                if len(ceo) >= 3:
+                    
+                    for index, row in ceo.iterrows():
+                        
+                        funk = str(row["Funktion"])
+                        
+                        if not funk == "nan":
+                            
+                            print(funk)
+                            trigger = any(x in funk for x in options)
+                            
+                            if not trigger:
+                                
+                                ceo.drop(labels=index, axis=0)
+                        
+                    data = pd.concat([data, ceo.head(3)])
+                                    
+                elif len(ceo) > 0 and len(ceo) < 3:
+                    
+                    data = pd.concat([data, ceo])
+                    miss = len(ceo)
+                    
+                    other = akt[akt["Funktion"].notna()]
+                    other = other[other["Funktion"].str.contains('|'.join(options), na=False)]
+                    
+                    data = pd.concat([data, other.head(3-miss)])
+                    
+                elif len(ceo) == 0:
+                    
+                    other = akt[akt["Funktion"].notna()]
+                    other = other[other["Funktion"].str.contains('|'.join(options), na=False)]
+                    
+                    if len(other)>0:
+                        
+                        data = pd.concat([data, other.head(3)])
+                        
+                    else:
+                        
+                        data = pd.concat([data, akt.head(1)])
+                        print("Hit")
+
+        data.drop(data[data["Telefon"].isna()].index, inplace=True)
+        data.reset_index(inplace=True, drop=True)
+
+        template["Organisation (Unternehmen)"] = data["Firmenname"]
+        template["Straße"] = data["Straße"]+" "+data["Hausnummer"]
+        template["PLZ"] = data["PLZ"]
+        template["Ort"] = data["Ort"]
+        template["Anrede"] = data["Serienbriefanrede"].str.split(" ").str[2]
+        template["Vorname"] = data["Vorname"]
+        template["Nachname"] = data["Name"]
+
+        for index, row in data.iterrows():
+            
+            if row["Visitenkarten-Info"] == "Geschäftsführer":
+                template.iloc[index, 7]= row["Visitenkarten-Info"]
+                
+            else:
+                
+                info = str(row["Visitenkarten-Info"])
+                funk = str(row["Funktion"])
+                
+                if funk!="nan":
+                    template.iloc[index, 7]= info + " " + funk
+                else:
+                    template.iloc[index, 7]= info
+            
+            St = str(row["Straße"])
+            hN = str(row["Hausnummer"])
+            
+            if hN != "nan":
+                template.iloc[index, 1] = St+" "+hN
+            
+            else:
+                template.iloc[index, 1] = St
+                
+        template["Telefon Zentrale"] = data["Telefon"]
+        template["Pers. E-Mail"] = data["AP-Email"]
+        template["E-Mail Unternehmen"] = data["Email"]
+        template["Webseite Unternehmen"] = data["Webseite"]
+        template["Duns-Nummer"] = data["DUNS-Nummer"]
+        try:
+            template["Industrie"] = self.branche ###globale Variable branche ###Brauchen wir das? ### Abfragen, ob nur eine Branche geclaimt wurde?
+        except:
+            template["Industrie"] = "---"
+        template["Datum eingeliefert"] = dt.datetime.today()
+
+        export_date = dt.datetime.today()
+        export_date = export_date.strftime("%d_%m_%Y")
+
+        template.to_excel(f"{self.folderName}/CVR_Import_APs_{export_date}.xlsx", index=False)
+
+        # claimLog.to_excel(f"{save}/Claimed_Prospects_Protokoll_{export_date}.xlsx", index=False)
+        
+        # Benachrichtigung, dass der Export abgeschlossen und die Datei gespeichert wurde. Dabei soll das Label zusätzlich noch den Pfad zur Datei anzeigen. Es soll rot markiert sein, damit es auffällt.
+        self.title.setText(f'Der Export wurde erfolgreich abgeschlossen! Die Datei wurde unter folgendem Pfad gespeichert: {self.folderName}/CVR_Import_APs_{export_date}.xlsx')
+        self.title.setStyleSheet("background-color: #FF0000")
+        
+        #Der Benutzer kann nun nicht mehr auf den "Export"-Button klicken und dieser wird grau dargestellt.
+        self.exportButton.setEnabled(False)
+        self.exportButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+        
     def back(self):
         print("Zurück geklickt")
         self.parent().setCurrentIndex(1)
         
 # Unclaim Screen
 class UnclaimScreen(QWidget):
-    def __init__(self):
+    def __init__(self, changeScreenCallback, startAutomationCallback):
+        self.changeScreenCallback = changeScreenCallback
+        self.startAutomationCallback = startAutomationCallback
+        self.beenVisited = False
         super().__init__()
         self.initUI()
         
@@ -2180,24 +2465,25 @@ class UnclaimScreen(QWidget):
         self.setLayout(mainLayout)
         
         titleLayout = QVBoxLayout()
-        title = QLabel('Im Folgenden wird dein Dashboard analysiert, um Prospects zu finden die entclaimt werden sollen:')
-        title.setObjectName('title')
-        title.setAlignment(Qt.AlignCenter)
+        self.title = QLabel('Im Folgenden wird dein Dashboard analysiert, um Prospects zu finden die entclaimt werden sollen:')
+        self.title.setObjectName('title')
+        self.title.setWordWrap(True)
+        self.title.setAlignment(Qt.AlignCenter)
         # title.setMaximumHeight(100)
-        titleLayout.addWidget(title)
+        titleLayout.addWidget(self.title)
         mainLayout.addLayout(titleLayout)
         
         # Es soll gewählt werden können, ob die Prospects vor dem Unclaimen noch überprüft werden sollen
         
         radioLayout = QHBoxLayout()
         checkBeforeUnclaimLabel = QLabel('Vor dem Unclaimen überprüfen')
-        checkBeforeUnclaim = QRadioButton()
+        self.checkBeforeUnclaim = QRadioButton()
         # make the radio button bigger so that it is easier to click
-        checkBeforeUnclaim.setMinimumHeight(200)
-        checkBeforeUnclaim.setMinimumHeight(75)
+        self.checkBeforeUnclaim.setMinimumHeight(200)
+        self.checkBeforeUnclaim.setMinimumHeight(75)
         # checkBeforeUnclaim.setChecked(True)
         radioLayout.addWidget(checkBeforeUnclaimLabel)
-        radioLayout.addWidget(checkBeforeUnclaim)
+        radioLayout.addWidget(self.checkBeforeUnclaim)
         radioLayout.setSpacing(25)
         mainLayout.addLayout(radioLayout)
         
@@ -2205,23 +2491,203 @@ class UnclaimScreen(QWidget):
         
         buttonsLayout = QHBoxLayout()
         self.unclaimButton = QPushButton('Unclaimen')
-        self.unclaimButton .clicked.connect(self.unclaim)
+        self.unclaimButton .clicked.connect(self.on_unclaim)
         self.nextButton = QPushButton('Weiter')
         self.nextButton.setEnabled(False)
         self.nextButton.setStyleSheet("background-color: #AAAAAA; color: white;")
-        self.nextButton.clicked.connect(self.next)
-        cancelButton = QPushButton('Abbrechen')
+        self.nextButton.clicked.connect(self.on_weiter)
+        self.cancelButton = QPushButton('Abbrechen')
+        self.cancelButton.clicked.connect(self.on_cancel)
         self.applyShadow(self.unclaimButton )
         self.applyShadow(self.nextButton)
-        self.applyShadow(cancelButton)
+        self.applyShadow(self.cancelButton)
         buttonsLayout.addWidget(self.unclaimButton )
         buttonsLayout.addWidget(self.nextButton)
-        buttonsLayout.addWidget(cancelButton)
+        buttonsLayout.addWidget(self.cancelButton)
         buttonsLayout.setSpacing(5)
         mainLayout.addLayout(buttonsLayout)
         
         mainLayout.setSpacing(200)
         mainLayout.setAlignment(radioLayout, Qt.AlignCenter)
+    
+    def on_enter(self):
+        
+        if self.beenVisited:
+            # Reset the title label and the buttons
+            self.title.setText('Im Folgenden wird dein Dashboard analysiert, um Prospects zu finden die entclaimt werden sollen:')
+            self.title.setStyleSheet("background-color: #387ADF")
+            self.unclaimButton.setEnabled(True)
+            self.unclaimButton.setStyleSheet("background-color: #387ADF; color: white;")
+            self.unclaimButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+            self.nextButton.setEnabled(False)
+            self.nextButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+            self.beenVisited = False
+    
+    class AutomationThread_U(QThread):
+        progressUpdated = pyqtSignal(int)
+        finished = pyqtSignal(int)
+        
+        def __init__(self, with_check):
+            super().__init__()
+            self.with_check = with_check
+            
+        def run(self):
+            # Automatisieren Sie den Unclaim-Prozess hier
+            driver.switch_to.window(driver.window_handles[0])
+            driver.switch_to.frame("frame_main")
+            XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[2]"
+            table_WV = driver.find_element(By.XPATH, XPATH)
+            wvs = table_WV.find_elements(By.TAG_NAME, "tr")
+            
+            XPATH = "/html/body/div[2]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[1]/tbody/tr/td"
+            seiten = driver.find_element(By.XPATH, XPATH)
+            seiten = seiten.text
+            seiten = seiten.split("von")[1]
+            seiten = seiten.strip()
+            seiten = int(seiten)
+            
+            self.progressUpdated.emit(5)
+            
+            if seiten > 1:
+            
+                for seite in range(seiten - 1):     ###
+                    
+                    XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[2]"
+                    table_WV = driver.find_element(By.XPATH, XPATH)
+                    wvs = table_WV.find_elements(By.TAG_NAME, "tr")
+
+                    for texts in wvs:
+                        text = texts.find_elements(By.TAG_NAME, "td")
+                        for i in text:
+                            if i.text.endswith("bitte unclaimen"):
+                                l = i.find_element(By.TAG_NAME, "a")
+                                l.send_keys(Keys.CONTROL + Keys.RETURN)
+                    try:
+                        XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[1]/tbody/tr/td/button"
+                        nextPage = driver.find_element(By.XPATH, XPATH)
+                        nextPage.click()
+                        
+                    except:
+                        print("keine Seite mehr")
+                        
+                    self.progressUpdated.emit(5 + seite/(len(seiten)-1) * 15)
+                        
+            else:
+                counter = 1
+                for texts in wvs:
+                    text = texts.find_elements(By.TAG_NAME, "td")
+                    for i in text:
+                        if i.text.endswith("bitte unclaimen"):
+                            l = i.find_element(By.TAG_NAME, "a")
+                            l.send_keys(Keys.CONTROL + Keys.RETURN)
+                    self.progressUpdated.emit(5 + counter/len(wvs) * 15)
+                    counter += 1
+                
+            ## Hier Überprüfung
+            if self.with_check:
+                self.progressUpdated.emit(100)
+                self.finished.emit(len(driver.window_handles)-1)
+            
+            else:
+                
+                tabs = driver.window_handles
+                numberTabs = len(tabs)
+                
+                counter = 1
+                for i in tabs:
+                    driver.switch_to.window(i)
+                    try:
+                        clicker("/html/body/form/table[1]/tbody/tr/th/a")
+                        self.progressUpdated.emit(20 + counter/numberTabs * 20)
+                        counter += 1
+                    except:
+                        print("first tab1")
+                    
+                counter = 1
+                for i in tabs:
+                    driver.switch_to.window(i)
+                    try:
+                        clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a")
+                        self.progressUpdated.emit(40 + counter/numberTabs * 20)
+                        counter += 1
+                    except:
+                        print("first tab2")
+                    
+                counter = 1    
+                for i in tabs:
+                    driver.switch_to.window(i)
+                    try:
+                        clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input[1]")  
+                        self.progressUpdated.emit(60 + counter/numberTabs * 20)
+                        counter += 1
+                    except:
+                        print("first tab3")
+                
+                counter = 1    
+                for i in tabs:
+                    driver.switch_to.window(i)
+                    try:
+                        driver.switch_to.alert.accept()
+                        self.progressUpdated.emit(80 + counter/numberTabs * 20)
+                        counter += 1
+                    except:
+                        print("first tab4")
+                    
+                driver.switch_to.window(driver.window_handles[0])
+                
+                self.progressUpdated.emit(100)
+                self.finished.emit(len(driver.window_handles)-1)
+    
+    class AutomationThread_W(QThread):
+        progressUpdated = pyqtSignal(int)
+        finished = pyqtSignal(int)
+        
+        def __init__(self):
+            super().__init__()
+            
+        def run(self):
+            driver.switch_to.window(driver.window_handles[0])
+        
+            tabs = driver.window_handles
+            numberTabs = len(tabs)
+            
+            counter = 1
+            for i in tabs:
+                driver.switch_to.window(i)
+                try:
+                    clicker("/html/body/form/table[1]/tbody/tr/th/a")
+                    self.progressUpdated.emit(counter/numberTabs * 40)
+                    counter += 1
+                except:
+                    print("first tab1")
+                
+            counter = 1
+            for i in tabs:
+                driver.switch_to.window(i)
+                try:
+                    clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a") 
+                    self.progressUpdated.emit(40 + counter/numberTabs * 30)
+                    counter += 1
+                except:
+                    print("first tab2")
+                
+            counter = 1
+            for i in tabs:
+                driver.switch_to.window(i)
+                try:
+                    clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input[1]")  
+                except:
+                    print("first tab3")
+                    
+                try:
+                    driver.switch_to.alert.accept()
+                    self.progressUpdated.emit(70 + counter/numberTabs * 30)
+                    counter += 1
+                except:
+                    print("first tab4")
+            
+            self.progressUpdated.emit(100)
+            self.finished.emit(len(driver.window_handles)-1)    
         
     def applyShadow(self, widget):
         shadow = QGraphicsDropShadowEffect()
@@ -2230,18 +2696,18 @@ class UnclaimScreen(QWidget):
         shadow.setYOffset(0)
         shadow.setColor(QColor(0, 0, 0, 50))
         widget.setGraphicsEffect(shadow)
+    
+    def on_unclaim(self):
+        self.startAutomationCallback()  # Startet die Automation
+        self.changeScreenCallback(8)
         
-    def unclaim(self):
-        print("Unclaimen")
-        self.nextButton.setEnabled(True)
-        self.nextButton.setStyleSheet("background-color: #387ADF; color: white;")
-        self.nextButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
-        self.unclaimButton.setEnabled(False)
-        self.unclaimButton.setStyleSheet("background-color: #AAAAAA; color: white;")
-        
-    def next(self):
-        print("Weiter geklickt")
-        self.parent().setCurrentIndex(1)
+    def on_weiter(self):
+        self.startAutomationCallback()  # Startet die Automation
+        self.changeScreenCallback(8)
+    
+    def on_cancel(self):
+        self.beenVisited = True
+        self.changeScreenCallback(1)
 
 # Loading Screen
 class LoadingScreen(QWidget):
@@ -2421,7 +2887,10 @@ class MainWindow(QMainWindow):
         self.finishScreen = FinishScreen()
         self.ExportScreen = ExportScreen()
         self.ApScreen = ApScreen()
-        self.unclaimScreen = UnclaimScreen()
+        self.ExportScreen.sendFilePath.connect(self.ApScreen.receiveFilePath)
+        self.ExportScreen.sendAPAge.connect(self.ApScreen.receiveAPAge)
+        self.searchScreen.sendBranche.connect(self.ApScreen.receiveBranche)
+        self.unclaimScreen = UnclaimScreen(self.setCurrentIndex, self.unclaimScreenAutomation)
         self.loadingScreen = LoadingScreen()
 
         self.stackedWidget.addWidget(self.loginScreen)
@@ -2561,7 +3030,66 @@ class MainWindow(QMainWindow):
     def onAutomationComplete_claim_weiter(self, result):
         self.stackedWidget.setCurrentWidget(self.finishScreen)
         self.finishScreen.title.setText(f"Es wurden {result} Prospects geclaimt!")
+    
+    ### Methoden für den Unclaim Screen ###
+    
+    def unclaimScreenAutomation(self):
+        self.automationThread = self.unclaimScreen.AutomationThread_U(self.unclaimScreen.checkBeforeUnclaim.isChecked())
+        self.automationThread.progressUpdated.connect(self.updateProgress)
+        if self.unclaimScreen.checkBeforeUnclaim.isChecked():
+            self.automationThread.finished.connect(self.onAutomationComplete_unclaim_weiter)
+        else:
+            self.automationThread.finished.connect(self.onAutomationComplete_unclaim)
+        self.loadingScreen.setRange(100)
+        self.loadingScreen.setLableProgressLabel("PAT analysiert nun die Prospects...")
+        self.loadingScreen.setNotificationLabel("Dies kann einige Minuten dauern...")
+        self.loadingScreen.setProgress(0)
+        self.setCurrentIndex(8)
+        # Starte die Automation und wechsle zum Ladebildschirm
+        self.automationThread.start()
+        self.loadingScreen.startTimer()
         
+        if self.unclaimScreen.checkBeforeUnclaim.isChecked():
+            self.unclaimScreen.startAutomationCallback = self.unclaimScreenAutomation_weiter
+    
+    def unclaimScreenAutomation_weiter(self):
+        self.automationThread = self.unclaimScreen.AutomationThread_U(self.unclaimScreen.checkBeforeUnclaim.isChecked())
+        self.automationThread.progressUpdated.connect(self.updateProgress)
+        self.automationThread.finished.connect(self.onAutomationComplete_unclaim)
+        self.loadingScreen.setRange(100)
+        self.loadingScreen.setLableProgressLabel("PAT unclaimt nun die Prospects...")
+        self.loadingScreen.setNotificationLabel("Dies kann einige Minuten dauern...")
+        self.loadingScreen.setProgress(0)
+        self.setCurrentIndex(8)
+        # Starte die Automation und wechsle zum Ladebildschirm
+        self.automationThread.start()
+        self.loadingScreen.startTimer()
+        
+        self.unclaimScreen.startAutomationCallback = self.unclaimScreenAutomation
+    
+    @pyqtSlot(int)
+    def onAutomationComplete_unclaim(self, result):
+        self.stackedWidget.setCurrentWidget(self.unclaimScreen)
+        self.unclaimScreen.title.setText(f"Es wurden {result} Prospects unclaimt!")
+        self.unclaimScreen.title.setStyleSheet("background-color: #990000;")
+        self.unclaimScreen.unclaimButton.setEnabled(False)
+        self.unclaimScreen.unclaimButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+        # self.unclaimScreen.unclaimButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+        self.unclaimScreen.nextButton.setEnabled(False)
+        self.unclaimScreen.nextButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+        # self.unclaimScreen.nextButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+        
+    @pyqtSlot(int)
+    def onAutomationComplete_unclaim_weiter(self, result):
+        self.stackedWidget.setCurrentWidget(self.unclaimScreen)
+        self.unclaimScreen.title.setText(f"Es wurden {result} Prospects gefunden, die unclaimt werden können! Du kannst nun die Tabs der Prospects, die Du nicht unclaimen möchtest, schließen! Wenn Du anschließend auf \"Weiter\" klickst werden die verbleibenden Prospects unclaimt!")
+        self.unclaimScreen.title.setStyleSheet("background-color: #990000;")
+        self.unclaimScreen.nextButton.setEnabled(True)
+        self.unclaimScreen.nextButton.setStyleSheet("background-color: #387ADF; color: white;")
+        self.unclaimScreen.nextButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+        self.unclaimScreen.unclaimButton.setEnabled(False)
+        self.unclaimScreen.unclaimButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+             
     ### Methoden für den Loading Screen ###
     def updateProgress(self, progress):
         self.loadingScreen.setProgress(progress)
