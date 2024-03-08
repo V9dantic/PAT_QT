@@ -584,7 +584,7 @@ class ChooseScreen(QWidget):
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
-        self.parent().setCurrentIndex(7)
+        self.parent().setCurrentIndex(5)
 
 # Search Screen
 class SearchScreen(QWidget):
@@ -935,6 +935,8 @@ class SearchScreen(QWidget):
 #Claim Screen        
 class ClaimScreen(QWidget):
     
+    beenVisited = False
+    
     def __init__(self, changeScreenCallback, startAutomationCallback):
         self.changeScreenCallback = changeScreenCallback
         self.startAutomationCallback = startAutomationCallback
@@ -1119,27 +1121,29 @@ class ClaimScreen(QWidget):
 
     def on_enter(self):
         # Setze die Hintergrundfarbe des Title-Labels zurück
-        self.title.setStyleSheet("background-color: #387ADF")
         
-        try:   
-            prospects_count = get_prospects()
+        if self.beenVisited==False:
+            self.title.setStyleSheet("background-color: #387ADF")
             
-            if prospects_count == 50:
-                XPATH = "/html/body/form/table[5]"
-                table = driver.find_element(By.XPATH, XPATH)
-                elements = table.find_elements(By.TAG_NAME, "tr")
-                prospects_count = len(elements) - 1
+            try:   
+                prospects_count = get_prospects()
                 
-            # Setze den Text des Title-Labels
-            self.title.setText(f'Es wurden {prospects_count} Prospects gefunden! Wähle nun wie viele geclaimt werden sollen:')
-            
-        except:
-            #check if the windowhandle is still the same (#0)
-            if driver.current_window_handle != driver.window_handles[0]:
-                self.title.setStyleSheet("background-color: #990000;")
-            else:
-                print("Es wurden keine Prospects gefunden!")
-                self.parent().setCurrentIndex(2)
+                if prospects_count == 50:
+                    XPATH = "/html/body/form/table[5]"
+                    table = driver.find_element(By.XPATH, XPATH)
+                    elements = table.find_elements(By.TAG_NAME, "tr")
+                    prospects_count = len(elements) - 1
+                    
+                # Setze den Text des Title-Labels
+                self.title.setText(f'Es wurden {prospects_count} Prospects gefunden! Wähle nun wie viele geclaimt werden sollen:')
+                
+            except:
+                #check if the windowhandle is still the same (#0)
+                if driver.current_window_handle != driver.window_handles[0]:
+                    self.title.setStyleSheet("background-color: #990000;")
+                else:
+                    print("Es wurden keine Prospects gefunden!")
+                    self.parent().setCurrentIndex(2)
     
     def setup_connections(self):
         self.start_button.clicked.connect(self.on_start)
@@ -1153,6 +1157,7 @@ class ClaimScreen(QWidget):
     def on_weiter(self):
         self.startAutomationCallback()  # Startet die Automation
         self.changeScreenCallback(8)
+        self.beenVisited = True
 
     class AutomationThread_S(QThread):
         progressUpdated = pyqtSignal(int)
@@ -1650,7 +1655,7 @@ class ClaimScreen(QWidget):
                         
                     clicker("/html/body/form/table[2]/tbody/tr[8]/td[2]/input[1]")
                     
-                self.progressUpdated.emit(int(counter/self.anzahl_prospects) * 100)
+                self.progressUpdated.emit(int((counter/self.anzahl_prospects) * 100))
                 counter = counter + 1
                 
             self.finished.emit(self.anzahl_prospects)
@@ -1940,21 +1945,28 @@ class ExportScreen(QWidget):
         
         self.formLayout = QVBoxLayout()
         
-        # Öffne Datei Button
+        # Öffne Datei Button und Textfeld
         
+        self.pathLayout = QVBoxLayout()
+        self.fileNameLine = QLineEdit()
+        self.fileNameLine.setPlaceholderText('Datei auswählen oder Pfad eingeben')
         self.fileButton = QPushButton('Datei öffnen')
-        self.fileButton.setMaximumWidth(int(self.width() - 25))
-        self.fileButton.setMinimumWidth(int(self.width() - 25))
+        # self.fileButton.setMaximumWidth(int(self.width() - 25))
+        # self.fileButton.setMinimumWidth(int(self.width() - 25))
         self.applyShadow(self.fileButton)
         self.fileButton.clicked.connect(self.openFileDialog)
-        self.formLayout.addWidget(self.fileButton)
+        self.pathLayout.addWidget(self.fileNameLine)
+        self.pathLayout.addWidget(self.fileButton)
+        self.pathLayout.setSpacing(5)
+        self.pathLayout.setAlignment(Qt.AlignCenter)
+        self.formLayout.addLayout(self.pathLayout)
         
         # "Geclaimt vor"-Dropdown
         
         claimedLayout = QHBoxLayout()
         claimedLabel = QLabel('Geclaimt vor:')
         self.claimedDropdown = QComboBox()
-        self.claimedDropdown.addItems(["---", "Heute", "1 Woche", "1 Monat", "3 Monaten", "6 Monaten", "1 Jahr"])
+        self.claimedDropdown.addItems(["Heute", "1 Woche", "1 Monat", "3 Monaten", "6 Monaten", "1 Jahr"])
         self.applyShadow(self.claimedDropdown)
         claimedLayout.addWidget(claimedLabel)
         claimedLayout.addWidget(self.claimedDropdown)
@@ -1983,7 +1995,7 @@ class ExportScreen(QWidget):
         mainLayout.addLayout(buttonsLayout)
         
         mainLayout.setAlignment(self.formLayout, Qt.AlignCenter)
-        mainLayout.setSpacing(150)
+        mainLayout.setSpacing(100)
 
     def applyShadow(self, widget):
         shadow = QGraphicsDropShadowEffect()
@@ -2010,6 +2022,7 @@ class ExportScreen(QWidget):
         self.nextButton.setStyleSheet("background-color: #387ADF; color: white;")
         # Reactivate the buttons hover effect
         self.nextButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+        self.fileNameLine.setText(self.fileName)
         
     def export(self):
         print("Ansprechpartner exportieren")
@@ -2142,6 +2155,9 @@ class ApScreen(QWidget):
         self.exportButton.setEnabled(False)
         self.exportButton.setStyleSheet("background-color: #AAAAAA; color: white;")
         self.exportButton.clicked.connect(self.export)
+        # Textfeld für den Speicherort, welches den ausgewählten Speicherort anzeigt und das Bearbeiten und einfügen ermöglicht
+        self.folderNameLabel = QLineEdit()
+        self.folderNameLabel.setPlaceholderText('Speicherort auswählen oder Pfad einfügen')
         saveButton.setMinimumHeight(55)
         self.exportButton.setMinimumHeight(55)
         self.applyShadow(saveButton)
@@ -2149,7 +2165,12 @@ class ApScreen(QWidget):
         buttonsLayout.addWidget(saveButton)
         buttonsLayout.addWidget(self.exportButton)
         buttonsLayout.setSpacing(5)
-        mainLayout.addLayout(buttonsLayout)
+        pathLayout = QVBoxLayout()
+        pathLayout.addWidget(self.folderNameLabel)
+        pathLayout.addLayout(buttonsLayout)
+        pathLayout.setAlignment(Qt.AlignCenter)
+        pathLayout.setSpacing(5)
+        mainLayout.addLayout(pathLayout)
         
         # Ein Button um den Vorgang abzubrechen und zurück zu gehen
         
@@ -2162,7 +2183,10 @@ class ApScreen(QWidget):
         self.resizeTable()
 
     def on_enter(self):
-        export = pd.read_excel(self.filePath, index_col=False)
+        
+        self.backButton.setText('Zurück')
+        
+        self.exportDf = pd.read_excel(self.filePath, index_col=False)
         import_date = dt.datetime.today()
         
         print(self.age)
@@ -2185,12 +2209,12 @@ class ApScreen(QWidget):
         elif self.age == "1 Jahr":
             import_date = import_date + dt.timedelta(days=360-361)
             
-        export["Claim-Ende"] = pd.to_datetime(export["Claim-Ende"], format="%d.%m.%Y", dayfirst=False)
-        export = export[export["Claim-Ende"] >= import_date]
+        self.exportDf["Claim-Ende"] = pd.to_datetime(self.exportDf["Claim-Ende"], format="%d.%m.%Y", dayfirst=False)
+        self.exportDf = self.exportDf[self.exportDf["Claim-Ende"] >= import_date]
 
         choose_function = []
 
-        cF = export[export["Funktion"].notna()]
+        cF = self.exportDf[self.exportDf["Funktion"].notna()]
 
         for funk in cF["Funktion"]:
             
@@ -2268,6 +2292,7 @@ class ApScreen(QWidget):
         self.exportButton.setEnabled(True)
         self.exportButton.setStyleSheet("background-color: #387ADF; color: white;")
         self.exportButton.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
+        self.folderNameLabel.setText(self.folderName)
     
     def export(self):
         print("---------------------------------------------------------")
@@ -2275,7 +2300,7 @@ class ApScreen(QWidget):
         print("---------------------------------------------------------")
         
         ### Einlesen des neuen datas
-        export = pd.read_excel(self.filePath, index_col=False)
+        export = self.exportDf
         template = pd.DataFrame(columns = ['Organisation (Unternehmen)', 'Straße', 'PLZ', 'Ort', 'Anrede', 'Vorname', 'Nachname', 'Position', 'Telefon Zentrale', 'Telefon direkt 1', 'Telefon direkt 2', 'Pers. E-Mail', 'E-Mail Unternehmen', 'Webseite Unternehmen', 'Duns-Nummer', 'Industrie', 'Ihre ID', 'Notizen', 'Datum eingeliefert', 'CVR Media Import'])
         data = pd.DataFrame()
         funktionen = [item.text() for item in self.tableWidget.selectedItems()]
@@ -2399,6 +2424,7 @@ class ApScreen(QWidget):
         #Der Benutzer kann nun nicht mehr auf den "Export"-Button klicken und dieser wird grau dargestellt.
         self.exportButton.setEnabled(False)
         self.exportButton.setStyleSheet("background-color: #AAAAAA; color: white;")
+        self.backButton.setText('Abschließen')
         
     def back(self):
         print("Zurück geklickt")
@@ -2997,6 +3023,7 @@ class MainWindow(QMainWindow):
         
         if self.claimScreen.check_before_claim.isChecked():
             self.claimScreen.startAutomationCallback = self.claimScreenAutomation_weiter
+            self.claimScreen.beenVisited = True
         
     def claimScreenAutomation_weiter(self):
         # Aufruf der Automation mit Übergabe der Parameter des Search Screens und Claim Screens
@@ -3037,6 +3064,7 @@ class MainWindow(QMainWindow):
     def onAutomationComplete_claim_weiter(self, result):
         self.stackedWidget.setCurrentWidget(self.finishScreen)
         self.finishScreen.title.setText(f"Es wurden {result} Prospects geclaimt!")
+        self.claimScreen.beeinVisited = False
     
     ### Methoden für den Unclaim Screen ###
     
