@@ -584,7 +584,7 @@ class ChooseScreen(QWidget):
             
     def unclaim(self):
         print("Wechsel zu Unclaim Screen")
-        self.parent().setCurrentIndex(5)
+        self.parent().setCurrentIndex(7)
 
 # Search Screen
 class SearchScreen(QWidget):
@@ -763,6 +763,9 @@ class SearchScreen(QWidget):
         widget.setGraphicsEffect(shadow)
         
     def automationMethodSearch(self):
+        
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_main")
              
         self.claimedLabel.setStyleSheet("background-color: #50C4ED;")
         self.neverClaimedLabel.setStyleSheet("background-color: #50C4ED;")
@@ -892,7 +895,6 @@ class SearchScreen(QWidget):
             
         self.branche = self.industryDropdown.currentText()
         self.sendBranche.emit(self.branche)
-        # self.branche_claim = self.branche_claim
         
         if self.branche != "---":
         
@@ -919,7 +921,9 @@ class SearchScreen(QWidget):
         search_settings = driver.find_element(By.XPATH, XPATH)
         search_settings.click()
         
+        print("Before setting the parent")
         self.parent().setCurrentIndex(3)
+        print("After setting the parent")
         
     def weiter(self):
         self.methodThread = threading.Thread(target=self.automationMethodSearch)
@@ -1124,6 +1128,12 @@ class ClaimScreen(QWidget):
         
         if self.beenVisited==False:
             self.title.setStyleSheet("background-color: #387ADF")
+            # Setze die Buttons zurück
+            self.weiter_button.setEnabled(False)
+            self.weiter_button.setStyleSheet("background-color: #AAAAAA; color: white;")
+            self.start_button.setEnabled(True)
+            self.start_button.setStyleSheet("background-color: #387ADF; color: white;")
+            self.start_button.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
             
             try:   
                 prospects_count = get_prospects()
@@ -1157,22 +1167,25 @@ class ClaimScreen(QWidget):
     def on_weiter(self):
         self.startAutomationCallback()  # Startet die Automation
         self.changeScreenCallback(8)
-        self.beenVisited = True
+        self.beenVisited = False
 
     class AutomationThread_S(QThread):
         progressUpdated = pyqtSignal(int)
         finished = pyqtSignal(int)
         sendClaimedDf = pyqtSignal(pd.DataFrame)
+        sendProspectsWithBranche = pyqtSignal(pd.DataFrame)
         
         # Konstruktor zum übergeben von Parametern
-        def __init__(self, last_claimed, value_label, check_before_claim, action_text):
+        def __init__(self, last_claimed, value_label, check_before_claim, action_text, branche):
             QThread.__init__(self)
             self.last_claimed = last_claimed
             self.value_label = value_label
             self.check_before_claim = check_before_claim
             self.action_text = action_text
+            self.branche = branche
             
-        def run(self):  
+        def run(self):
+            print("Start Thread started")
             self.prospects_geclaimt = 0
             # global claimLog
             anzahl_tabs = 0
@@ -1462,6 +1475,14 @@ class ClaimScreen(QWidget):
             daughters_with_claimed_mothers = start_tabs[start_tabs["Firma"].isin(grandclaim)]
             
             keep_open = start_tabs[~start_tabs["Firma"].isin(daughters_with_claimed_mothers["Firma"])]
+            print(keep_open)
+            
+            # Erstelle ein DataFrame mit den Namen der Firmen aus der Spalte "Firma" in einer Spalte "Prospects" und füge für jede Firma den Wert von self.branche in die Spalte "Branche" ein
+            prospects_with_branche = pd.DataFrame()
+            prospects_with_branche["Prospects"] = keep_open["Firma"]
+            prospects_with_branche["Branche"] = self.branche
+            self.sendProspectsWithBranche.emit(prospects_with_branche)
+            
             keep_open = keep_open["Tab"].tolist()
             
             start = len(keep_open) + 1
@@ -1505,8 +1526,6 @@ class ClaimScreen(QWidget):
             except:
                 
                 print("Keine geclaimten Mütter")
-                
-            print(claimLog)
             
             self.sendClaimedDf.emit(claimLog)
                     
@@ -1600,7 +1619,7 @@ class ClaimScreen(QWidget):
             self.status_text = status_text
             
         def run(self):
-                        
+            print("Continuation Thread started")
             driver.switch_to.window(driver.window_handles[0])
             self.anzahl_prospects = len(driver.window_handles) - 1
             
@@ -1759,7 +1778,7 @@ class FinishScreen(QWidget):
         moreButton.clicked.connect(self.more)
         
         middleTitleLayout = QVBoxLayout()
-        middleTitle = QLabel('Wenn Du die Ansprechpartner deiner soeben geclaimten Prospects exportieren möchtest, solltest du dies NUR tun, wenn Du HEUTE auschließlich Prospects der SELBEN Branche gelaimt hast, da es sonst zu Fehlern in der Zuordnung kommt!')
+        middleTitle = QLabel('Hier kannst Du nun die Ansprechpartner deiner soeben geclaimten Prospects exportieren:')
         # enable multiline text
         middleTitle.setWordWrap(True)
         middleTitle.setObjectName('title')
@@ -2041,6 +2060,10 @@ class ApScreen(QWidget):
         super().__init__()
         self.initUI()
         
+        #Erstelle ein DataFrame, mit den Spalten "Prospects" und "Branche"
+        self.branchen = pd.DataFrame(columns=["Prospects", "Branche"])
+        self.claimedDfExport = pd.DataFrame()
+        
     def initUI(self):
         self.setStyleSheet("""
             QWidget {
@@ -2265,7 +2288,18 @@ class ApScreen(QWidget):
         # Verarbeiten Sie das empfangene DataFrame
         print(f"Empfangenes DataFrame: {claimedDf}")
         self.claimedDf = claimedDf
-            
+        
+        # Hinzufügen des DataFrames in das vollständig leere DataFrame "claimedDfExport"
+        self.claimedDfExport = pd.concat([self.claimedDfExport, self.claimedDf], ignore_index=True)
+    
+    def receiveProspectsWithBranche(self, prospectsWithBranche):
+        # Verarbeiten Sie die empfangenen Prospects
+        print(f"Empfangene Prospects: {prospectsWithBranche}")
+        self.prospectsWithBranche = prospectsWithBranche
+        
+        #Füge die empfangenen Prospects in das DataFrame "branchen" ein ohne die Methode append zu verwenden
+        self.branchen = pd.concat([self.branchen, self.prospectsWithBranche], ignore_index=True)
+              
     def resizeTable(self):
         self.tableWidget.resizeColumnsToContents()
         self.tableWidget.resizeRowsToContents()
@@ -2404,10 +2438,11 @@ class ApScreen(QWidget):
         template["E-Mail Unternehmen"] = data["Email"]
         template["Webseite Unternehmen"] = data["Webseite"]
         template["Duns-Nummer"] = data["DUNS-Nummer"]
-        try:
-            template["Industrie"] = self.branche ###globale Variable branche ###Brauchen wir das? ### Abfragen, ob nur eine Branche geclaimt wurde?
-        except:
-            template["Industrie"] = "---"
+        for index, row in template.iterrows():
+            for index2, row2 in self.branchen.iterrows():
+                if row["Organisation (Unternehmen)"] == row2["Prospects"]:
+                    template.at[index, "Industrie"] = row2["Branche"]
+                    
         template["Datum eingeliefert"] = dt.datetime.today()
 
         export_date = dt.datetime.today()
@@ -2415,11 +2450,11 @@ class ApScreen(QWidget):
 
         template.to_excel(f"{self.folderName}/CVR_Import_APs_{export_date}.xlsx", index=False)
 
-        self.claimedDf.to_excel(f"{self.folderName}/Claimed_Prospects_Protokoll_{export_date}.xlsx", index=False)
+        self.claimedDfExport.to_excel(f"{self.folderName}/Claimed_Prospects_Protokoll_{export_date}.xlsx", index=False)
         
         # Benachrichtigung, dass der Export abgeschlossen und die Datei gespeichert wurde. Dabei soll das Label zusätzlich noch den Pfad zur Datei anzeigen. Es soll rot markiert sein, damit es auffällt.
         self.title.setText(f'Der Export wurde erfolgreich abgeschlossen! Die Datei wurde unter folgendem Pfad gespeichert: {self.folderName}/CVR_Import_APs_{export_date}.xlsx')
-        self.title.setStyleSheet("background-color: #FF0000")
+        self.title.setStyleSheet("background-color: #990000")
         
         #Der Benutzer kann nun nicht mehr auf den "Export"-Button klicken und dieser wird grau dargestellt.
         self.exportButton.setEnabled(False)
@@ -2428,6 +2463,20 @@ class ApScreen(QWidget):
         
     def back(self):
         print("Zurück geklickt")
+        
+        tabs = driver.window_handles
+
+        for i in tabs:
+
+            driver.switch_to.window(i)
+
+            if i != driver.window_handles[0]:
+                
+                driver.close()
+                
+        driver.switch_to.window(driver.window_handles[0])
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
         self.parent().setCurrentIndex(1)
         
 # Unclaim Screen
@@ -2602,7 +2651,7 @@ class UnclaimScreen(QWidget):
                     except:
                         print("keine Seite mehr")
                         
-                    self.progressUpdated.emit(5 + seite/(len(seiten)-1) * 15)
+                    self.progressUpdated.emit(5 + (seite/(seiten-1)) * 15)
                         
             else:
                 counter = 1
@@ -2630,7 +2679,8 @@ class UnclaimScreen(QWidget):
                     driver.switch_to.window(i)
                     try:
                         clicker("/html/body/form/table[1]/tbody/tr/th/a")
-                        self.progressUpdated.emit(20 + counter/numberTabs * 20)
+                        self.progressUpdated.emit(20 + (counter/numberTabs) * 20)
+                        print(counter/numberTabs * 20)
                         counter += 1
                     except:
                         print("first tab1")
@@ -2640,7 +2690,7 @@ class UnclaimScreen(QWidget):
                     driver.switch_to.window(i)
                     try:
                         clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a")
-                        self.progressUpdated.emit(40 + counter/numberTabs * 20)
+                        self.progressUpdated.emit(40 + (counter/numberTabs) * 20)
                         counter += 1
                     except:
                         print("first tab2")
@@ -2650,7 +2700,7 @@ class UnclaimScreen(QWidget):
                     driver.switch_to.window(i)
                     try:
                         clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input[1]")  
-                        self.progressUpdated.emit(60 + counter/numberTabs * 20)
+                        self.progressUpdated.emit(60 + (counter/numberTabs) * 20)
                         counter += 1
                     except:
                         print("first tab3")
@@ -2660,7 +2710,7 @@ class UnclaimScreen(QWidget):
                     driver.switch_to.window(i)
                     try:
                         driver.switch_to.alert.accept()
-                        self.progressUpdated.emit(80 + counter/numberTabs * 20)
+                        self.progressUpdated.emit(80 + (counter/numberTabs) * 20)
                         counter += 1
                     except:
                         print("first tab4")
@@ -2739,6 +2789,22 @@ class UnclaimScreen(QWidget):
     
     def on_cancel(self):
         self.beenVisited = True
+        
+        tabs = driver.window_handles
+
+        for i in tabs:
+
+            driver.switch_to.window(i)
+
+            if i != driver.window_handles[0]:
+                
+                driver.close()
+                
+        driver.switch_to.window(driver.window_handles[0])
+        driver.switch_to.parent_frame()
+        driver.switch_to.frame("frame_menu")
+        clicker("/html/body/form/div/ul/li[1]")
+        
         self.changeScreenCallback(1)
 
 # Loading Screen
@@ -2935,7 +3001,7 @@ class MainWindow(QMainWindow):
         self.stackedWidget.addWidget(self.unclaimScreen)
         self.stackedWidget.addWidget(self.loadingScreen)
         
-        ### Hier wird der automatische Login ausgeführt
+        ## Hier wird der automatische Login ausgeführt
         
         # Comment out the lines below to use manual login
         try:
@@ -3006,12 +3072,17 @@ class MainWindow(QMainWindow):
         last_claimed_out = self.searchScreen.last_claimed
         return last_claimed_out
     
+    def get_branche(self):
+        branche_out = self.searchScreen.branche
+        return branche_out
+    
     def claimScreenAutomation(self):
         #Aufruf der Automation mit Übergabe der Parameter des Search Screens und Claim Screens
-        self.automationThread = self.claimScreen.AutomationThread_S(self.get_last_claimed(), int(self.claimScreen.value_label.text()), self.claimScreen.check_before_claim.isChecked(), self.claimScreen.action_text.text())
+        self.automationThread = self.claimScreen.AutomationThread_S(self.get_last_claimed(), int(self.claimScreen.value_label.text()), self.claimScreen.check_before_claim.isChecked(), self.claimScreen.action_text.text(), self.get_branche())
         self.automationThread.progressUpdated.connect(self.updateProgress)
         self.automationThread.finished.connect(self.onAutomationComplete_claim)
         self.automationThread.sendClaimedDf.connect(self.apScreen.receiveClaimedDf)
+        self.automationThread.sendProspectsWithBranche.connect(self.apScreen.receiveProspectsWithBranche)
         self.loadingScreen.setRange(100)
         self.loadingScreen.setLableProgressLabel("PAT analysiert nun die Prospects...")
         self.loadingScreen.setNotificationLabel("Dies kann einige Minuten dauern...")
@@ -3065,6 +3136,9 @@ class MainWindow(QMainWindow):
         self.stackedWidget.setCurrentWidget(self.finishScreen)
         self.finishScreen.title.setText(f"Es wurden {result} Prospects geclaimt!")
         self.claimScreen.beeinVisited = False
+        self.automationThread.finished.connect(self.onAutomationComplete_claim)
+        # Weise wieder die ursprüngliche Methode zu
+        self.claimScreen.startAutomationCallback = self.claimScreenAutomation
     
     ### Methoden für den Unclaim Screen ###
     
@@ -3073,10 +3147,11 @@ class MainWindow(QMainWindow):
         self.automationThread.progressUpdated.connect(self.updateProgress)
         if self.unclaimScreen.checkBeforeUnclaim.isChecked():
             self.automationThread.finished.connect(self.onAutomationComplete_unclaim_weiter)
+            self.loadingScreen.setLableProgressLabel("PAT lädt nun die Vorgänge der Prospects...")
         else:
             self.automationThread.finished.connect(self.onAutomationComplete_unclaim)
+            self.loadingScreen.setLableProgressLabel("PAT unclaimt nun die Prospects...")
         self.loadingScreen.setRange(100)
-        self.loadingScreen.setLableProgressLabel("PAT analysiert nun die Prospects...")
         self.loadingScreen.setNotificationLabel("Dies kann einige Minuten dauern...")
         self.loadingScreen.setProgress(0)
         self.setCurrentIndex(8)
