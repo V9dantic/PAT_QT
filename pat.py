@@ -4,6 +4,7 @@ import pandas as pd
 import threading
 import datetime as dt
 from datetime import datetime, timedelta
+import re
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect, QMainWindow, QStackedWidget,QSizePolicy, QComboBox, QCheckBox, QSlider, QRadioButton, QFileDialog, QTableWidget, QTableWidgetItem, QProgressBar, QHeaderView
 from PyQt5.QtCore import QEvent, Qt, QSize, QRect, QThread, pyqtSignal, QTimer, pyqtSlot
@@ -61,6 +62,69 @@ MAGIC_USERNAME_KEY = 'PAT_VA'
 branchen = pd.read_excel("sources/Branche_Input.xlsx", index_col=False)
 print(branchen)
 
+# Methode zum Klicken eines Elements unter Angabe des XPath. Dabei soll gewartet werden, bis das Element klickbar ist.
+def click_element(xpath):
+    element = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, xpath))
+    )
+    element.click()
+
+# Methode zum senden von Text an ein Element unter Angabe des XPath. Dabei soll gewartet werden, bis das Element klickbar ist.
+def send_text(xpath, text):
+    try:
+        element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath))
+        )
+        element.clear()
+        element.send_keys(text)
+    except TimeoutException:
+        print("Element nicht klickbar")
+        driver.quit()
+        sys.exit()
+
+# Methode zum warten auf ein Element unter Angabe des XPath
+def wait_for_element(xpath):
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath))
+        )
+    except TimeoutException:
+        print("Element nicht gefunden")
+        driver.quit()
+        sys.exit()
+
+# Methode zum Laden eines Elements unter Angabe des XPath
+def load_element(xpath):
+    try:
+        element = driver.find_element(By.XPATH, xpath)
+        return element
+    except:
+        print("Element nicht gefunden")
+        driver.quit()
+        sys.exit()
+
+# Methode zum Warten bis die Seite vollständig geladen ist und die Hintergrundaktivitäten abgeschlossen sind
+def wait_for_page_load():
+    try:
+        WebDriverWait(driver, 10).until(
+            lambda driver: driver.execute_script('return document.readyState') == 'complete'
+        )
+    except TimeoutException:
+        print("Seite nicht vollständig geladen")
+        driver.quit()
+        sys.exit()
+
+# Methode mit der gewartet wird bis das Attribut "area hidden" des Elements auf "true" gesetzt ist
+def wait_for_hidden(xpath):
+    try:
+        WebDriverWait(driver, 60).until(
+            lambda driver: driver.find_element(By.XPATH, xpath).get_attribute("aria-hidden") == "true"
+        )
+    except TimeoutException:
+        print("Element nicht versteckt")
+        driver.quit()
+        sys.exit()
+
 ### Methode zum Zählen der gefundenen Prospects ###
 def get_prospects(): 
     
@@ -101,7 +165,8 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
     
     repeat = False
     new_start = total_len
-    
+    ### Nun werden Firmen mit geclaimten Müttern rausgefiltert ###
+
     for i in range(start_len, total_len):
         
         if i != 0:
@@ -109,52 +174,73 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
             print("Tab #"+str(i-adjust))
             
             driver.switch_to.window(driver.window_handles[i-adjust])
+            # Scroll to the top of the page
+            driver.execute_script("window.scrollTo(0, 0)")
             
             has_duns = False
             akt_relations = []
 
-            XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-            title = driver.find_element(By.XPATH, XPATH)
-            name = title.text.lstrip("Firma ")
-            print("Name: " + name)
-            
-            XPATH="//*[@id=\"main_container\"]/form/table[3]/tbody/tr[2]/td/table/tbody/tr[1]/td[4]/table"
-            table = driver.find_element(By.XPATH, XPATH)
-            rows = table.find_elements(By.TAG_NAME, "tr")
-            
-            ## DUNS-Nummer Suche
-            
-            for row in rows:
-                
-                if row.text.startswith("DUNS-Nummer:"):
-                    
-                    duns = int(''.join(filter(str.isdigit, row.text)))
-                    has_duns = True
+            # Get the name
+            name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+            print("Name: " + name.text)
+            name = name.text
+
+            # Load the table with all informations on the left side
+            left_side = load_element("/html/body/div[1]/div/div[3]/div[1]")
+            # Get elements by tag name "block-edit"
+            sections = left_side.find_elements(By.TAG_NAME, "block-edit")
+
+            # Iterate through the sections
+            for section in sections:
+                if section.text.startswith("Zusatzfelder"):
+                    # Get the rows of the section
+                    rows = section.find_elements(By.TAG_NAME, "div")
+                    # Iterate through the rows
+                    for row in rows:
+                        # Get the cells of the row
+                        cells = row.find_elements(By.TAG_NAME, "div")
+                        # Check if the first cell contains the text "DUNS-Nummer"
+                        for cell in cells:
+                            if cell.text.startswith("DUNS-Nummer"):
+                                # Get the DUNS number
+                                duns = ''.join(filter(str.isdigit, cell.text))
+                                has_duns = True
+                                print(f"DUNS-Nummer: {duns}")
+                                break
+                        break
                     
             if has_duns == True and (not duns in daughters["Duns"].values):
                 
-                daughters = pd.concat([daughters, pd.DataFrame([[name, i-adjust, duns]], columns=["Firma", "Tab", "Duns"])], ignore_index=True)
-                
-                XPATH = "//*[@id=\"main_container\"]/form/table[3]/tbody/tr[2]/td/table"
-                table = driver.find_element(By.XPATH, XPATH)
-                sections = table.find_elements(By.TAG_NAME, "tr")
-                
+                daughters = pd.concat([daughters, pd.DataFrame([[name, i-adjust, duns]], columns=["Firma", "Tab", "Duns"])], ignore_index=True)        
+                    
+                table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                sections = table.find_elements(By.TAG_NAME, "block-single")
+
                 for section in sections:
                     
-                    if section.text.startswith("Adressbeziehungen"):
+                    if section.text.startswith("Beziehungen"):
+                        
+                        # find the links with the text "Beziehungen bearbeiten"
+                        link = section.find_element(By.PARTIAL_LINK_TEXT, "Beziehungen bearbeiten")
+                        link.click()
                         
                         anzahl_relations = 0
-                        rows = section.find_elements(By.TAG_NAME, "tr")
-                        first_time = True
+                        # find elements with the attribute ng_show="editRelations"
+                        elements = section.find_element(By.XPATH, "//*[@ng-show=\"editRelations\"]")
+                        # Find elements by class name "tablerow ng-scope"
+                        rows = elements.find_elements(By.CLASS_NAME, "tablerow")
                         
                         for row in rows:
                             
-                            cells = row.find_elements(By.TAG_NAME, "td")
-                            
+                            cells = row.find_elements(By.CLASS_NAME, "tablecell")
+
                             if len(cells) > 1:
                                 
-                                if cells[0].text.startswith(name):
-                                    
+                                name_relation = cells[0].text
+                                name_relation = name_relation.split(" (")[0]
+
+                                if name_relation == name:
+
                                     if cells[1].text == "ist direkte Tochter":
                                         
                                         if cells[0].text.split("(")[0] != cells[2].text.split("(")[0]:
@@ -163,87 +249,96 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
                                             link = cells[2].find_element(By.TAG_NAME, "a")
                                             link.send_keys(Keys.CONTROL + Keys.RETURN)
                                             repeat = True
-                                        
+
                                         else:
-                                            
-                                            print("Same name...")    
-                                    
+
+                                            print("Same name...")
+
                                 elif cells[2].text.lstrip("von ").startswith(name):
-                                    
+
                                     print("Tochterfirma")
-                                    
+
                         add_to_len = anzahl_relations
+
                         current_tabs = driver.window_handles
                         
                         for j in range(anzahl_relations):
-                            
+
                             driver.switch_to.window(driver.window_handles[total_len + j])
+                            driver.switch_to.parent_frame()
                             akt_relations.append(total_len + j)
                             geclaimt = False
+                            time.sleep(2)
+                            wait_for_page_load()
                             
-                            XPATH = "/html/body/div[2]/form/table[2]/tbody/tr/td[3]/div/span/span/a"
-                            era_status = driver.find_element(By.XPATH, XPATH)
-                            era_status.click()
-                            
-                            try: 
+                            table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                            sections = table.find_elements(By.TAG_NAME, "block-single")
+
+                            for section in sections:
                                 
-                                XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input"
-                                claim_button = driver.find_element(By.XPATH, XPATH)
+                                # print(section.text)
+                                if section.text.startswith("ERA Status"):
+                                    tables = section.find_elements(By.TAG_NAME, "table")
+
+                                    informations = tables[-1].find_elements(By.TAG_NAME, "div")
+                                    break
                                 
-                            except:
-                                
+                            if informations[0].text != "Available":
+
                                 geclaimt = True
-                                XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-                                title = driver.find_element(By.XPATH, XPATH)
-                                mother_name = title.text.lstrip("Firma ")
-                                XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[1]/div[1]"
 
-                                status = driver.find_element(By.XPATH, XPATH)
+                                # Scroll to the top of the page
+                                driver.execute_script("window.scrollTo(0, 0)")
 
-                                XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[2]/div[1]"
+                                # Get the mothers name
+                                mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                mother_name = mother_name.text
 
-                                partner = driver.find_element(By.XPATH, XPATH)
+                                # Get the status
+                                status = informations[0]
 
-                                XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[3]/div[1]"
-                                tage = driver.find_element(By.XPATH, XPATH)
-                                                                
-                                if status.text != "Client":
+                                # Get the partner
+                                partner = informations[6]
+
+                                # Get the days
+                                tage = informations[8]
+
+                                if informations[0].text != "Client":
 
                                     tage = int(''.join(filter(str.isdigit, tage.text)))
-
                                     tage = datetime.today() - timedelta(days=tage)
-
                                     tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
-                                    
+
                                 else:
-                                    
+
                                     tage = datetime.strptime(tage.text, '%Y-%m-%d')
-                                
-                                mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"])], ignore_index=True)
-                                
-                                clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
-                                
-                            if geclaimt == False:
-                                
-                                clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
-                                
-                                XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-                                title = driver.find_element(By.XPATH, XPATH)
-                                mother_name = title.text.lstrip("Firma ")
-                                
-                                mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, False, name]], columns=["Firma", "Tab", "Geclaimt", "Tochter"])], ignore_index=True)
-                                
-                        total_len += add_to_len
+
+                                mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"])], ignore_index=True)    
+
+                                # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
                             
+                            if geclaimt == False:
+                    
+                                    # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+                                    
+                                    # Scroll to the top of the page
+                                    driver.execute_script("window.scrollTo(0, 0)")
+
+                                    # Get the mothers name
+                                    mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                    mother_name = mother_name.text
+                    
+                                    mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, False, name]], columns=["Firma", "Tab", "Geclaimt", "Tochter"])], ignore_index=True)
+
+                        total_len += add_to_len
                         driver.switch_to.window(driver.window_handles[i-adjust])
             
             else:
                 
-                print("Duplicate or no DUNS-number")
+                print("Dupicate or no DUNS-number")
                 driver.close()
-        
                 adjust += 1
-                total_len = total_len - 1            
+                total_len = total_len - 1
 
     return mothers, daughters, repeat, new_start, total_len, adjust
 
@@ -425,13 +520,8 @@ class LoginScreen(QWidget):
                     time.sleep(3)
                     
                     driver.switch_to.parent_frame()
-                    driver.switch_to.frame("frame_menu")
-                    
-                    XPATH = "/html/body/form/div/ul/li[11]"
-                    
-                    tester = driver.find_element(By.XPATH, XPATH)
-                
-                    self.parent().setCurrentIndex(1)
+
+                    ### Vielleicht noch das erfolgreiche Einloggen überprüfen ###
                         
                 except: 
                     
@@ -551,32 +641,27 @@ class ChooseScreen(QWidget):
                 driver.switch_to.parent_frame()
                 self.progressUpdated.emit(10)  # Annahme: 10% Fortschritt
 
-                driver.switch_to.frame("frame_menu")
-                search_address = driver.find_element(By.ID, "button_plugins")
-                search_address.click()
+                # Klicken auf Schaltfläche "Mehr"
+                click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
                 self.progressUpdated.emit(30)  # Annahme: 30% Fortschritt
 
+                # Klicken auf Schaltfläche "Licensee Plugin
                 driver.switch_to.parent_frame()
-                driver.switch_to.frame("frame_main")
-                search_search = driver.find_element(By.XPATH, "/html/body/div[1]")  # Switch Admin (2) und Licensee (1)
-                search_search.click()
+                click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
                 self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
-                XPATH = "/html/body/form/table[3]/tbody/tr/td/input[3]"
+                # Klicken auf Schaltfläche "Aktionen"
+                click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
+                self.progressUpdated.emit(70)  # Annahme: 70% Fortschritt
 
-                try:
-                    elem = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, XPATH)))
-                    self.progressUpdated.emit(70)  # Annahme: 70% Fortschritt
-
-                finally:
-                    search_go = driver.find_element(By.XPATH, XPATH)
-                    search_go.click()
-                    self.progressUpdated.emit(100)  # Annahme: 100% Fortschritt
-                    self.finished.emit()  # Senden eines Erfolgs
+                # Klicken auf soeben erschienene Schaltfläche "Available"
+                click_element("//*[@id=\"menu_container_8\"]/md-menu-content/md-menu-item[3]/button")
+                self.progressUpdated.emit(100)  # Annahme: 100% Fortschritt
+                self.finished.emit()  # Senden eines Erfolgs
 
             except Exception as e:
-                self.finished.emit(False, str(e))  # Senden eines Fehlerschlags
+                print(e)
+                self.finished.emit()
      
     def claim(self):
         self.startAutomationCallback()  # Startet die Automation
@@ -765,17 +850,16 @@ class SearchScreen(QWidget):
     def automationMethodSearch(self):
         
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_main")
-             
+                
         self.claimedLabel.setStyleSheet("background-color: #50C4ED;")
         self.neverClaimedLabel.setStyleSheet("background-color: #50C4ED;")
-        
+
         # Speichern der aktuellen Auswahl des claimed-Dropdowns
         self.last_claimed = self.claimedDropdown.currentText()
-        
+
         print(self.last_claimed)
         print(self.neverClaimedBox.isChecked())
-        
+
         if self.neverClaimedBox.isChecked() == True and self.last_claimed != "---":
             self.claimedDropdown.setCurrentIndex(0)
             self.neverClaimedBox.setChecked(False)
@@ -783,44 +867,37 @@ class SearchScreen(QWidget):
             # Färbe das Dropdown Label und das "Noch nie geclaimed" Label rot
             self.claimedLabel.setStyleSheet("background-color: #990000;")
             self.neverClaimedLabel.setStyleSheet("background-color: #990000;")
-                      
+                        
             return
-        
+
         # Speichern der Werte der Eingabefelder
-        
         min_turn = self.revenueMin.text()
         max_turn = self.revenueMax.text()
         min_emp = self.employeeMin.text()
         max_emp = self.employeeMax.text()
-        
-        # driver.switch_to.parent_frame()
-        # driver.switch_to.frame("frame_menu")
-        
-        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[1]/td[2]/input[1]"
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.clear()
-        search_settings.send_keys(min_turn)
 
-        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[1]/td[2]/input[2]"
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.clear()
-        search_settings.send_keys(max_turn)
+        # Eingabe der Werte in die Eingabefelder
 
-        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[2]/td[2]/input[1]"
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.clear()
-        search_settings.send_keys(min_emp)
+        # Eingabe des Mindestumsatzes
+        send_text("//*[@id=\"input_12\"]", min_turn)
 
-        XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[2]/td[2]/input[2]"
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.clear()
-        search_settings.send_keys(max_emp)
+        # Eingabe des Maximalumsatzes
+        send_text("//*[@id=\"input_13\"]", max_turn)
+
+        # Eingabe der Mindestanzahl an Mitarbeitern
+        send_text("//*[@id=\"input_14\"]", min_emp)
+
+        # Eingabe der Maximalanzahl an Mitarbeitern
+        send_text("//*[@id=\"input_15\"]", max_emp)
+
+        # Auswählen der Region
+        click_element("//*[@id=\"select_20\"]")
 
         region_input = self.regionDropdown.currentText()
-        
+
         if region_input == "---":
             
-            XPATH = "//*[@id=\"address_category4\"]/option[1]"
+            XPATH = "//*[@id=\"select_option_42\"]"
             
         else:
             
@@ -828,76 +905,69 @@ class SearchScreen(QWidget):
             
             if region_input == "AT":
             
-                XPATH = "//*[@id=\"address_category4\"]/option[11]"
+                XPATH = "//*[@id=\"select_option_52\"]"
                 
             elif region_input == "CH":
             
-                XPATH = "//*[@id=\"address_category4\"]/option[12]"
+                XPATH = "//*[@id=\"select_option_53\"]"
                 
             else:
-                region_input = int(region_input)+1
-                XPATH = f"//*[@id=\"address_category4\"]/option[{str(region_input)}]"
-        
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.click()
-        
+                region_input = int(region_input)+42
+                XPATH = f"//*[@id=\"select_option_{str(region_input)}\"]"
+
+        click_element(XPATH)
+
         # Check for the box "Noch nie geclaimed"
         if  self.neverClaimedBox.isChecked() == False:
             
             if self.never_claimed_pressed == True:
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/input"
-                search_settings = driver.find_element(By.XPATH, XPATH)
-                print("Hit")
-                search_settings.click()
+                click_element("/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]")
                 self.never_claimed_pressed = False
+                
+            click_element("//*[@id=\"select_22\"]")
             
             if self.last_claimed == "3 Monaten":
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[2]"
+                XPATH = "//*[@id=\"select_option_55\"]"
                 
             elif self.last_claimed == "6 Monaten":
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[3]"
+                XPATH = "//*[@id=\"select_option_56\"]"
                 
             elif self.last_claimed == "1 Jahr":
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[4]"
+                XPATH = "//*[@id=\"select_option_57\"]"
                 
             elif self.last_claimed == "3 Jahren":
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[5]"
+                XPATH = "//*[@id=\"select_option_58\"]"
                 
             elif self.last_claimed == "5 Jahren":
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[5]"
+                XPATH = "//*[@id=\"select_option_59\"]"
                 
             else:
+                XPATH = "//*[@id=\"select_option_54\"]"
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[1]"
-                
-            search_settings = driver.find_element(By.XPATH, XPATH)
-            print(search_settings.get_attribute("value"))
-            search_settings.click()
+            click_element(XPATH)
             
         else:
-            
-            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/select/option[1]"
-            search_settings = driver.find_element(By.XPATH, XPATH)
-            search_settings.click()
+            click_element("//*[@id=\"select_22\"]")
+            XPATH = "//*[@id=\"select_option_54\"]"
+            click_element(XPATH)
             
             if self.never_claimed_pressed == False:
                 
-                XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[1]/table/tbody/tr[5]/td[2]/input"
-                search_settings = driver.find_element(By.XPATH, XPATH)
-                search_settings.click()
+                XPATH = "/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]"
+                click_element(XPATH)
                 self.never_claimed_pressed = True
             
         self.branche = self.industryDropdown.currentText()
         self.sendBranche.emit(self.branche)
-        
+
         if self.branche != "---":
-        
+
             branche = branchen[branchen["Name"]==self.branche]
             
             left = int(branche["Branche_l"].values)
@@ -907,20 +977,12 @@ class SearchScreen(QWidget):
             right = right - 1
             right = str(right)
 
-            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[2]/table/tbody/tr[1]/td[2]/input[1]"
-            search_settings = driver.find_element(By.XPATH, XPATH)
-            search_settings.clear()
-            search_settings.send_keys(left)
+            send_text("//*[@id=\"input_18\"]", left)
 
-            XPATH = "//*[@id=\"available_addresses_filter_div\"]/table/tbody/tr/td[2]/table/tbody/tr[1]/td[2]/input[2]"
-            search_settings = driver.find_element(By.XPATH, XPATH)
-            search_settings.clear()
-            search_settings.send_keys(right)
+            send_text("//*[@id=\"input_19\"]", right)
 
-        XPATH = "/html/body/form/table[3]/tbody/tr/td/button"
-        search_settings = driver.find_element(By.XPATH, XPATH)
-        search_settings.click()
-        
+        click_element("/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[2]/div[2]/button")
+
         print("Before setting the parent")
         self.parent().setCurrentIndex(3)
         print("After setting the parent")
@@ -930,11 +992,12 @@ class SearchScreen(QWidget):
         self.methodThread.start()
         
     def back(self):
+        driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
-        clicker("/html/body/form/div/ul/li[1]")
+        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
         
-        self.parent().setCurrentIndex(1)
+        self.parent().setCurrentIndex(1) 
+
 
 #Claim Screen        
 class ClaimScreen(QWidget):
@@ -1135,18 +1198,39 @@ class ClaimScreen(QWidget):
             self.start_button.setStyleSheet("background-color: #387ADF; color: white;")
             self.start_button.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
             
-            try:   
-                prospects_count = get_prospects()
+            try:
+                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")  
+                wait_for_element("/html/body/div[1]/div/div[3]/div/block-multi[2]/div/p/span[4]")
+                number_of_results = load_element("/html/body/div[1]/div/div[3]/div/block-multi[2]/div/p/span[4]").text
                 
-                if prospects_count == 50:
-                    XPATH = "/html/body/form/table[5]"
-                    table = driver.find_element(By.XPATH, XPATH)
-                    elements = table.find_elements(By.TAG_NAME, "tr")
-                    prospects_count = len(elements) - 1
+                if number_of_results == "":
+                    # self.title.setStyleSheet("background-color: #990000;")
                     
-                # Setze den Text des Title-Labels
-                self.title.setText(f'Es wurden {prospects_count} Prospects gefunden! Wähle nun wie viele geclaimt werden sollen:')
-                
+                    # Zurückkehren zum vorherigen Screen
+                    # Klicken auf das Menü-Icon
+                    click_element("//*[@id=\"menu\"]/div[1]/div/div/div[1]/a")
+                    
+                    # Klicken auf Schaltfläche "Mehr"
+                    click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
+
+                    # Klicken auf Schaltfläche "Licensee Plugin
+                    driver.switch_to.parent_frame()
+                    click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+
+                    # Klicken auf Schaltfläche "Aktionen"
+                    click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
+
+                    # Klicken auf soeben erschienene Schaltfläche "Available"
+                    click_element("//*[@id=\"menu_container_8\"]/md-menu-content/md-menu-item[3]/button")
+
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                    
+                    self.parent().setCurrentIndex(2)
+                    return
+                else:
+                    # Setze den Text des Title-Labels
+                    self.title.setText(f'Es wurden {number_of_results} Prospects gefunden! Wähle nun wie viele geclaimt werden sollen:')
+                    
             except:
                 #check if the windowhandle is still the same (#0)
                 if driver.current_window_handle != driver.window_handles[0]:
@@ -1192,70 +1276,79 @@ class ClaimScreen(QWidget):
             self.maxClaims = int(self.value_label)
             self.aktion = self.action_text
             
-            XPATH= "/html/body/form/table[5]"
-
-            table_prospects = driver.find_element(By.XPATH, XPATH)
-            prospects = table_prospects.find_elements(By.TAG_NAME, "tr")
+            
+            table = load_element("/html/body/div[1]/div/div[3]/div/block-multi[2]/div/div[2]")
             
             if self.maxClaims == 0:
                 self.finished.emit(0)
                 return
             
-            counter = 1
-            for row in prospects:
+            links = table.find_elements(By.TAG_NAME, "a")
+
+            # Iterate through the links and open them in a new tab. The number of tabs opened is limited by the maxClaims variable.
+            # Tabs should be opened by sending the links the keybord shortcut "Ctrl + Click" to open them in a new tab.
+
+            for link in links:
                 if anzahl_tabs == self.maxClaims:
                     break
-
-                try:
-                    cells = row.find_elements(By.TAG_NAME, "td")
-                    for cell in cells:
-                        try:
-                            tab = cell.find_element(By.TAG_NAME, "a")
-                            tab.send_keys(Keys.CONTROL + Keys.RETURN)
-                            anzahl_tabs = anzahl_tabs + 1
-                        except:
-                            print("No Link")
-                except:
-                    print("first row")
-                
-                self.progressUpdated.emit(int((counter / self.maxClaims) * 10))
-                counter = counter + 1
+                # Open the link in a new tab
+                link.send_keys(Keys.CONTROL + Keys.RETURN)
+                anzahl_tabs += 1
+                self.progressUpdated.emit(int((anzahl_tabs / self.maxClaims) * 10))
             print(f"Es wurden {anzahl_tabs} neue Tabs geöffnet!")
 
             ### Hier werden veraltete Prospects rausgefiltert
 
             tabs = driver.window_handles
             anzahl_prospects = 0
+            first_time = False
 
             for i in tabs:
                 driver.switch_to.window(i)
+                driver.switch_to.parent_frame()
+
 
                 if i != driver.window_handles[0]:
-                
-                    XPATH = "//*[@id=\"main_container\"]/form/table[3]/tbody/tr[2]/td/table"
                     
-                    table = driver.find_element(By.XPATH, XPATH)
-                    rows = table.find_elements(By.TAG_NAME, "tr")
+                    anzahl_prospects += 1
+                    
+                    if first_time == False:
+                        time.sleep(3)
+                        wait_for_page_load()
+                        first_time = True
+                
+                    info_table = load_element("/html/body/div[1]/div/div[3]/div[1]/block-edit[1]/div")
 
-                    for row in rows:
+                    # Get the links
+                    links = info_table.find_elements(By.TAG_NAME, "a")
 
-                        infos = row.find_elements(By.TAG_NAME, "td")
+                    # Click on the element with the text "mehr"
+                    for link in links:
+                        if link.text == "mehr":
+                            link.click()
+                            break
+                    
+                    whole_table = load_element("/html/body/div[1]/div/div[3]/div[1]/block-edit[1]/div")
 
-                        for info in infos:
-                        
-                            if info.text.startswith("DB-Eintrag"):
+                    tables = whole_table.find_elements(By.TAG_NAME, "table")
 
-                                if info.text.endswith("24"):
+                    tables = tables[-1].find_elements(By.TAG_NAME, "tr")
+                    
+                    # Regulären Ausdruck definieren, um vierstellige Jahreszahlen zu finden
+                    year_pattern = re.compile(r'\b(20\d{2})\b')
 
-                                    anzahl_prospects = anzahl_prospects + 1
-                                            
-                                else:
+                    # Alle Vorkommen von Jahreszahlen finden
+                    years = year_pattern.findall(tables[-1].text)
 
-                                    print(info.text)
-                                    driver.close()
+                    # Gebe das letzte Jahr aus
+                    print(f"Das letzte Jahr, in dem ein Update stattgefunden hat, ist {years[-1]}")
+
+                    if int(years[-1]) < 2024:
+                        # Schließe den Tab
+                        driver.close()
                                     
                 self.progressUpdated.emit(10 + int((anzahl_prospects / self.maxClaims) * 20))
-                counter = counter + 1
+                
             ### Nun werden Firmen mit geclaimten Müttern rausgefiltert ###
             
             tabs = driver.window_handles
@@ -1269,7 +1362,7 @@ class ClaimScreen(QWidget):
             columns_m = ["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"]
             mothers = pd.DataFrame(columns=["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"])
             mothers = mothers.reindex(columns=columns_m)
-            
+
             columns_miss = ["Firma", "Tab", "Geclaimt", "Tochter"]
 
             adjust = 0
@@ -1281,131 +1374,162 @@ class ClaimScreen(QWidget):
                     print("Tab #"+str(i-adjust))
                     
                     driver.switch_to.window(driver.window_handles[i-adjust])
+                    # Scroll to the top of the page
+                    driver.execute_script("window.scrollTo(0, 0)")
                     
                     has_duns = False
                     akt_relations = []
 
-                    XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-                    title = driver.find_element(By.XPATH, XPATH)
-                    name = title.text.lstrip("Firma ")
-                    print("Name: " + name)
-                    
-                    XPATH="//*[@id=\"main_container\"]/form/table[3]/tbody/tr[2]/td/table/tbody/tr[1]/td[4]/table"
-                    table = driver.find_element(By.XPATH, XPATH)
-                    rows = table.find_elements(By.TAG_NAME, "tr")
-                    
-                    ### DUNS-Nummer Suche
-                    
-                    for row in rows:
-                        
-                        if row.text.startswith("DUNS-Nummer:"):
-                            
-                            duns = int(''.join(filter(str.isdigit, row.text)))
-                            has_duns = True
+                    # Get the name
+                    name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                    print("Name: " + name.text)
+                    name = name.text
+
+                    # Load the table with all informations on the left side
+                    left_side = load_element("/html/body/div[1]/div/div[3]/div[1]")
+                    # Get elements by tag name "block-edit"
+                    sections = left_side.find_elements(By.TAG_NAME, "block-edit")
+
+                    # Iterate through the sections
+                    for section in sections:
+                        if section.text.startswith("Zusatzfelder"):
+                            # Get the rows of the section
+                            rows = section.find_elements(By.TAG_NAME, "div")
+                            # Iterate through the rows
+                            for row in rows:
+                                # Get the cells of the row
+                                cells = row.find_elements(By.TAG_NAME, "div")
+                                # Check if the first cell contains the text "DUNS-Nummer"
+                                for cell in cells:
+                                    if cell.text.startswith("DUNS-Nummer"):
+                                        # Get the DUNS number
+                                        duns = ''.join(filter(str.isdigit, cell.text))
+                                        has_duns = True
+                                        print(f"DUNS-Nummer: {duns}")
+                                        break
+                                break
                             
                     if has_duns == True and (not duns in daughters["Duns"].values):
                         
                         daughters = pd.concat([daughters, pd.DataFrame([[name, i-adjust, duns]], columns=columns_d)], ignore_index=True)        
                             
-                        XPATH = "//*[@id=\"main_container\"]/form/table[3]/tbody/tr[2]/td/table"
-                        table = driver.find_element(By.XPATH, XPATH)
-                        sections = table.find_elements(By.TAG_NAME, "tr")
-                        
+                        table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                        sections = table.find_elements(By.TAG_NAME, "block-single")
+
                         for section in sections:
                             
-                            if section.text.startswith("Adressbeziehungen"):
+                            if section.text.startswith("Beziehungen"):
+                                
+                                # find the links with the text "Beziehungen bearbeiten"
+                                link = section.find_element(By.PARTIAL_LINK_TEXT, "Beziehungen bearbeiten")
+                                link.click()
                                 
                                 anzahl_relations = 0
-                                rows = section.find_elements(By.TAG_NAME, "tr")
-                                first_time = True
+                                # find elements with the attribute ng_show="editRelations"
+                                elements = section.find_element(By.XPATH, "//*[@ng-show=\"editRelations\"]")
+                                # Find elements by class name "tablerow ng-scope"
+                                rows = elements.find_elements(By.CLASS_NAME, "tablerow")
                                 
                                 for row in rows:
                                     
-                                    cells = row.find_elements(By.TAG_NAME, "td")
-                                    
+                                    cells = row.find_elements(By.CLASS_NAME, "tablecell")
+
                                     if len(cells) > 1:
                                         
-                                        if cells[0].text.startswith(name):
-                                            
+                                        name_relation = cells[0].text
+                                        name_relation = name_relation.split(" (")[0]
+
+                                        if name_relation == name:
+
                                             if cells[1].text == "ist direkte Tochter":
                                                 
                                                 if cells[0].text.split("(")[0] != cells[2].text.split("(")[0]:
-                                                
+                                                    
                                                     anzahl_relations += 1
                                                     link = cells[2].find_element(By.TAG_NAME, "a")
                                                     link.send_keys(Keys.CONTROL + Keys.RETURN)
-                                                    
+
                                                 else:
-                                                    
+
                                                     print("Same name...")
-                                            
+
                                         elif cells[2].text.lstrip("von ").startswith(name):
-                                            
+
                                             print("Tochterfirma")
-                                            
+
                                 add_to_len = anzahl_relations
-                                    
+
                                 current_tabs = driver.window_handles
                                 
                                 for j in range(anzahl_relations):
-                                    
-                                    
+
                                     driver.switch_to.window(driver.window_handles[total_len + j])
+                                    driver.switch_to.parent_frame()
                                     akt_relations.append(total_len + j)
                                     geclaimt = False
+                                    time.sleep(2)
+                                    wait_for_page_load()
                                     
-                                    XPATH = "/html/body/div[2]/form/table[2]/tbody/tr/td[3]/div/span/span/a"
-                                    era_status = driver.find_element(By.XPATH, XPATH)
-                                    era_status.click()
-                                    
-                                    try: 
+                                    table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                                    sections = table.find_elements(By.TAG_NAME, "block-single")
+
+                                    for section in sections:
                                         
-                                        XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input"
-                                        claim_button = driver.find_element(By.XPATH, XPATH)
-                                        
-                                    except:
-                                        
+                                        # print(section.text)
+                                        if section.text.startswith("ERA Status"):
+                                            tables = section.find_elements(By.TAG_NAME, "table")
+
+                                            informations = tables[-1].find_elements(By.TAG_NAME, "div")
+                                            break
+
+                                    if informations[0].text != "Available":
+
                                         geclaimt = True
-                                        XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-                                        title = driver.find_element(By.XPATH, XPATH)
-                                        mother_name = title.text.lstrip("Firma ")
-                                        
-                                        XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[1]/div[1]"
-                                        status = driver.find_element(By.XPATH, XPATH)
 
-                                        XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[2]/div[1]"
-                                        partner = driver.find_element(By.XPATH, XPATH)
+                                        # Scroll to the top of the page
+                                        driver.execute_script("window.scrollTo(0, 0)")
 
-                                        XPATH = "/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[1]/table/tbody/tr/td[3]/div[1]"
-                                        tage = driver.find_element(By.XPATH, XPATH)
-                                        
-                                        if status.text != "Client":
-                                            
+                                        # Get the mothers name
+                                        mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                        mother_name = mother_name.text
+
+                                        # Get the status
+                                        status = informations[0]
+
+                                        # Get the partner
+                                        partner = informations[6]
+
+                                        # Get the days
+                                        tage = informations[8]
+
+                                        if informations[0].text != "Client":
+
                                             tage = int(''.join(filter(str.isdigit, tage.text)))
                                             tage = datetime.today() - timedelta(days=tage)
                                             tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
-                                            
-                                        else:
-                                            
-                                            tage = datetime.strptime(tage.text, '%Y-%m-%d')
-                                        
-                                        mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=columns_m)], ignore_index=True)    
-                                        
-                                        clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
-                                        
-                                    if geclaimt == False:
-                                        
-                                        clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
-                                        
-                                        XPATH = "/html/body/div[2]/form/table[1]/tbody/tr/th"
-                                        title = driver.find_element(By.XPATH, XPATH)
-                                        mother_name = title.text.lstrip("Firma ")
-                                        
-                                        mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, False, name]], columns=columns_miss)], ignore_index=True)    
 
+                                        else:
+
+                                            tage = datetime.strptime(tage.text, '%Y-%m-%d')
+
+                                        mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=columns_m)], ignore_index=True)    
+
+                                        # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
                                     
+                                    if geclaimt == False:
+                            
+                                            # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+                                            
+                                            # Scroll to the top of the page
+                                            driver.execute_script("window.scrollTo(0, 0)")
+
+                                            # Get the mothers name
+                                            mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                            mother_name = mother_name.text
+                            
+                                            mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, False, name]], columns=columns_miss)], ignore_index=True)
+
                                 total_len += add_to_len
-                                    
                                 driver.switch_to.window(driver.window_handles[i-adjust])
                     
                     else:
@@ -1535,28 +1659,30 @@ class ClaimScreen(QWidget):
             for i in tabs:
 
                 driver.switch_to.window(i)
+                driver.switch_to.parent_frame()
 
                 if i != driver.window_handles[0]:
-                    
-                    if self.last_claimed != "---":
-                        
-                        clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[7]/div/span/span/a")
-                        clicker("/html/body/div[2]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td/span/input")
-                        
-                        try:
+
+                    table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                    sections = table.find_elements(By.TAG_NAME, "block-multi")
+
+                    for section in sections:
+
+                        if section.text.startswith("Sales"):
+
+                            links = section.find_elements(By.TAG_NAME, "a")
+
+                            # Click the second link
+                            links[3].click()
+                            break
                             
-                            clicker("/html/body/div[2]/form/table[3]/tbody/tr/td/table[2]/tbody/tr[2]/td[3]/a")
-                                
-                        except:
-                            
-                            print("Kein Vorgang")
-                            
-                    if self.check_before_claim:
-                        self.progressUpdated.emit(90 + int((counter / (len(tabs)-1)) * 10))
-                    else:
-                        self.progressUpdated.emit(80 + int((counter / (len(tabs)-1)) * 10))
-                                    
-            self.anzahl_prospects = anzahl_prospects - len(daughters_with_claimed_mothers)
+                if self.check_before_claim:
+                    self.progressUpdated.emit(90 + int((counter / (len(tabs)-1)) * 10))
+                else:
+                    self.progressUpdated.emit(80 + int((counter / (len(tabs)-1)) * 10))
+
+            # Calculate the number of tabs that are left open and do not count the first tab
+            self.anzahl_prospects = len(driver.window_handles) - 1
             self.prospects_geclaimt = self.anzahl_prospects
             print(f"Es wurden {self.anzahl_prospects} valide Prospects gefunden")
             
@@ -1567,9 +1693,6 @@ class ClaimScreen(QWidget):
                 self.finished.emit(self.anzahl_prospects)
             
             else:
-                
-                print("Alle Prospects wurden geclaimt...")
-                    
                 ## Hier werden nun die gefundenen Prospects geclaimed und deren Vorgänge gepflegt
 
                 tabs = driver.window_handles
@@ -1580,31 +1703,39 @@ class ClaimScreen(QWidget):
 
                     if i != driver.window_handles[0]:
 
-                        clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a")
-                        clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input")
-                        clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[7]/div/span/span/a")
-                        clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[2]/tbody/tr[2]/td[3]/a")
-                        clicker("/html/body/form/table[4]/tbody/tr[1]/td[2]/input")
+                        click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[1]/input")
+                        time.sleep(3)
+                        wait_for_page_load()
+
+                        table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                        sections = table.find_elements(By.TAG_NAME, "block-multi")
+
+                        for section in sections:
+                            if section.text.startswith("Sales"):
+
+                                links = section.find_elements(By.TAG_NAME, "a")
+                                break
+                                
+                        # Click the second link
+                        links[3].click()
                         
-                        XPATH = "/html/body/form/table[2]/tbody/tr[1]/td[2]/textarea"
-                        text = driver.find_element(By.XPATH, XPATH)
-                        text.send_keys(self.aktion)
-                        
-                        clicker("//*[@id=\"holdfile_vs_appointment_empty\"]")
-                        clicker("/html/body/form/table[2]/tbody/tr[10]/td[2]/input[1]")
-                        clicker("/html/body/form/div[2]/p/table/tbody/tr/td[2]/a[1]/i")
+                        click_element("/html/body/div[1]/div[3]/div[5]/block-multi[1]/div/p/span[5]/a")
+                        send_text("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[4]/form/div/div/div[3]/md-input-container/div[1]/textarea", self.aktion)
+                        click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[5]/form/div/div/div[6]/md-checkbox/div[1]")
+                        click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[1]/span[3]/button[4]")
                         
                         if self.ids.status.text == "A - Prospect/AP qualifiziert":
-                            clicker("/html/body/form/table[2]/tbody/tr[7]/td[2]/select[1]/option[1]")
+                            click_element("/html/body/div[1]/div[3]/div[3]/div/div[1]")
                             
                         if self.ids.status.text == "B - An Telemarketing übergeben":
-                            clicker("/html/body/form/table[2]/tbody/tr[7]/td[2]/select[1]/option[2]")  
-                            
-                        clicker("/html/body/form/table[2]/tbody/tr[8]/td[2]/input[1]")
+                            click_element("/html/body/div[1]/div[3]/div[3]/div/div[2]")  
                         
                     self.progressUpdated.emit(90 + int((counter / self.anzahl_prospects) * 10))
                     counter = counter + 1
-
+                
+                
+                print("Alle Prospects wurden geclaimt...")
+                    
                 self.finished.emit()
                 return anzahl_prospects
         
@@ -1640,39 +1771,53 @@ class ClaimScreen(QWidget):
 
                 if i != driver.window_handles[0]:
                     
-                    if self.last_claimed != "---":
+                    # TODO: Wieder aktivieren, wenn es Sinn macht
+                    # if self.last_claimed != "---":
                         
-                        ### Hier wird eine Exception für geclaimte Prospects ohne Vorgang gemacht
+                    ### Hier wird eine Exception für geclaimte Prospects ohne Vorgang gemacht
+                    
+                    try:
+                
+                        # scroll to the top of the page
+                        driver.execute_script("window.scrollTo(0, 0)")
+
+                        # Return to the main page
+                        click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
                         
-                        try:
-                    
-                            clicker("/html/body/form/table[1]/tbody/tr/th/a")
-                            
-                        except:
-                            
-                            print("Kein Vorgang")
+                    except:
                         
-                    clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a")
-                    clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input")
-                    clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[7]/div/span/span/a")
-                    clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[2]/tbody/tr[2]/td[3]/a")
-                    clicker("/html/body/form/table[4]/tbody/tr[1]/td[2]/input")
+                        print("Kein Vorgang")
+                        
+                    click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[1]/input")
+                    time.sleep(3)
+                    wait_for_page_load()
+
+                    table = load_element("/html/body/div[1]/div/div[3]/div[2]")
+                    sections = table.find_elements(By.TAG_NAME, "block-multi")
+
+                    for section in sections:
+                        if section.text.startswith("Sales"):
+
+                            links = section.find_elements(By.TAG_NAME, "a")
+                            break
+            
                     
-                    XPATH = "/html/body/form/table[2]/tbody/tr[1]/td[2]/textarea"
-                    text = driver.find_element(By.XPATH, XPATH)
-                    text.send_keys(self.action_text)
-                    
-                    clicker("//*[@id=\"holdfile_vs_appointment_empty\"]")
-                    clicker("/html/body/form/table[2]/tbody/tr[10]/td[2]/input[1]")
-                    clicker("/html/body/form/div[2]/p/table/tbody/tr/td[2]/a[1]/i")
+                    # Click the second link
+                    links[3].click()
+
+                    time.sleep(1)
+                    wait_for_page_load()
+
+                    click_element("/html/body/div[1]/div[3]/div[5]/block-multi[1]/div/p/span[5]/a")
+                    send_text("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[4]/form/div/div/div[3]/md-input-container/div[1]/textarea", self.action_text)
+                    click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[5]/form/div/div/div[6]/md-checkbox/div[1]")
+                    click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[1]/span[3]/button[4]")
                     
                     if self.status_text == "A - Prospect/AP qualifiziert":
-                        clicker("/html/body/form/table[2]/tbody/tr[7]/td[2]/select[1]/option[1]")
+                        click_element("/html/body/div[1]/div[3]/div[3]/div/div[1]")
                         
                     if self.status_text == "B - An Telemarketing übergeben":
-                        clicker("/html/body/form/table[2]/tbody/tr[7]/td[2]/select[1]/option[2]")  
-                        
-                    clicker("/html/body/form/table[2]/tbody/tr[8]/td[2]/input[1]")
+                        click_element("/html/body/div[1]/div[3]/div[3]/div/div[2]") 
                     
                 self.progressUpdated.emit(int((counter/self.anzahl_prospects) * 100))
                 counter = counter + 1
@@ -1682,6 +1827,23 @@ class ClaimScreen(QWidget):
     def on_back(self):
         # Logik, die ausgeführt wird, wenn der Zurück-Button geklickt wird
         print('Zurück wurde geklickt')
+        
+        # Klicken auf das Menü-Icon
+        click_element("//*[@id=\"menu\"]/div[1]/div/div/div[1]/a")
+        
+        # Klicken auf Schaltfläche "Mehr"
+        click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
+
+        # Klicken auf Schaltfläche "Licensee Plugin
+        driver.switch_to.parent_frame()
+        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+
+        # Klicken auf Schaltfläche "Aktionen"
+        click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
+
+        # Klicken auf soeben erschienene Schaltfläche "Available"
+        click_element("//*[@id=\"menu_container_8\"]/md-menu-content/md-menu-item[3]/button")
+
         self.parent().setCurrentIndex(2)
         
     def slider_value_changed(self):
@@ -1829,7 +1991,6 @@ class FinishScreen(QWidget):
         
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
         self.parent().setCurrentIndex(2)
         
     def export(self):
@@ -1846,22 +2007,21 @@ class FinishScreen(QWidget):
         
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
-        search_address = driver.find_element(By.ID, "button_plugins")
-        search_address.click()
-
-        driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_main")
-        XPATH = "/html/body/div[1]"
-        search_search = driver.find_element(By.XPATH, XPATH)
-        search_search.click()
         
-        clicker("/html/body/form/table[3]/tbody/tr/td/a[2]")
-        clicker("/html/body/form/table[2]/tbody/tr[1]/td[2]/input[1]")
-        clicker("/html/body/form/table[2]/tbody/tr[2]/td[2]/input")
-        clicker("/html/body/form/table[2]/tbody/tr[3]/td[2]/input")
-        clicker("/html/body/form/center/table/tbody/tr/td/table/tbody/tr/td/table[2]/tbody/tr[2]/td/input[4]")
-        clicker("/html/body/form/center/table/tbody/tr/td/table/tbody/tr/td/table[2]/tbody/tr[3]/td/button")
+        try:
+            click_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[2]/div[1]/div/md-menu/button")
+        except:
+            click_element("/html/body/div[1]/div/titlesection/div[1]/div/span[3]/div/md-menu/button")
+
+        try:
+            click_element("/html/body/div[7]/md-menu-content/md-menu-item[4]/button")
+        except:
+            click_element("/html/body/div[8]/md-menu-content/md-menu-item[4]/button")
+
+        click_element("/html/body/div[1]/div/div[3]/div/block-edit/div/div[4]/form/div/div/div[2]/md-checkbox/div[1]")
+        click_element("/html/body/div[1]/div/div[3]/div/block-edit/div/div[1]/span[3]/button[4]")
+        click_element("/html/body/div[1]/div/div[3]/div/block-single[2]/div/div/a")
+        click_element("/html/body/div/div[3]/div[2]/block-single[2]/div/div/div[1]/div[4]/a")
 
         self.parent().setCurrentIndex(5)
         
@@ -1879,8 +2039,7 @@ class FinishScreen(QWidget):
                 
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
-        clicker("/html/body/form/div/ul/li[1]")
+        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
         
         self.parent().setCurrentIndex(1) 
 
@@ -2049,10 +2208,10 @@ class ExportScreen(QWidget):
         self.parent().setCurrentIndex(6)
         
     def back(self):
+        driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
-        clicker("/html/body/form/div/ul/li[1]")
-        self.parent().setCurrentIndex(1)
+        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
+        self.parent().setCurrentIndex(1) 
 
 # AP Screen
 class ApScreen(QWidget):
@@ -2476,7 +2635,6 @@ class ApScreen(QWidget):
                 
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
         self.parent().setCurrentIndex(1)
         
 # Unclaim Screen
@@ -2613,56 +2771,61 @@ class UnclaimScreen(QWidget):
             self.with_check = with_check
             
         def run(self):
-            # Automatisieren Sie den Unclaim-Prozess hier
-            driver.switch_to.window(driver.window_handles[0])
-            driver.switch_to.frame("frame_main")
-            XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[2]"
-            table_WV = driver.find_element(By.XPATH, XPATH)
-            wvs = table_WV.find_elements(By.TAG_NAME, "tr")
-            
-            XPATH = "/html/body/div[2]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[1]/tbody/tr/td"
-            seiten = driver.find_element(By.XPATH, XPATH)
-            seiten = seiten.text
-            seiten = seiten.split("von")[1]
-            seiten = seiten.strip()
-            seiten = int(seiten)
-            
-            self.progressUpdated.emit(5)
-            
-            if seiten > 1:
-            
-                for seite in range(seiten - 1):     ###
-                    
-                    XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[2]"
-                    table_WV = driver.find_element(By.XPATH, XPATH)
-                    wvs = table_WV.find_elements(By.TAG_NAME, "tr")
+            ### Unclaim Prospects ###
 
-                    for texts in wvs:
-                        text = texts.find_elements(By.TAG_NAME, "td")
-                        for i in text:
-                            if i.text.endswith("bitte unclaimen"):
-                                l = i.find_element(By.TAG_NAME, "a")
-                                l.send_keys(Keys.CONTROL + Keys.RETURN)
-                    try:
-                        XPATH = "//*[@id=\"body_div\"]/form/table/tbody/tr[2]/td[1]/table[3]/tbody/tr[2]/td/table[1]/tbody/tr/td/button"
-                        nextPage = driver.find_element(By.XPATH, XPATH)
-                        nextPage.click()
+            driver.switch_to.window(driver.window_handles[0])
+            driver.switch_to.parent_frame()
+
+            # Click on the "Todos" button
+            todo_button = load_element("/html/body/div/div[3]/div[3]/div/div[3]/div[2]/block-multi/div/p/span[1]/a/i")
+            driver.execute_script("arguments[0].click();", todo_button)
+
+            # Load the element which contains the number of sites
+            num_sites = load_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div")
+
+            # Get the number of sites
+            num_sites = int(num_sites.text.split(" / ")[-1])
+            print(f"Anzahl der Seiten: {num_sites}")
+
+            driver.switch_to.window(driver.window_handles[0])
+            driver.switch_to.parent_frame()
+
+            # Iterate through the sites
+
+            for i in range(num_sites-1):
+
+                wait_for_page_load()
+                
+                # Load the table
+                todo_table = load_element("/html/body/div/div[3]/div/block-multi/div/div[2]")
+
+                # Get the rows of the table by class name "tablerow"
+                rows = todo_table.find_elements(By.CLASS_NAME, "tablerow")
+
+                # Iterate through the rows
+                for row in rows:
+                    
+                    # Get the cells of the row by class name "tablecell"
+                    cells = row.find_elements(By.CLASS_NAME, "tablecell")
+
+                    # Check if the cells text starts with "Kein Interesse (Out), bitte unclaimen"
+                    if cells[-2].text.startswith("Kein Interesse (Out), bitte unclaimen"):
                         
-                    except:
-                        print("keine Seite mehr")
-                        
-                    self.progressUpdated.emit(5 + (seite/(seiten-1)) * 15)
-                        
-            else:
-                counter = 1
-                for texts in wvs:
-                    text = texts.find_elements(By.TAG_NAME, "td")
-                    for i in text:
-                        if i.text.endswith("bitte unclaimen"):
-                            l = i.find_element(By.TAG_NAME, "a")
-                            l.send_keys(Keys.CONTROL + Keys.RETURN)
-                    self.progressUpdated.emit(5 + counter/len(wvs) * 15)
-                    counter += 1
+                        # get the link of the cell
+                        link = cells[-2].find_element(By.TAG_NAME, "a")
+
+                        # Open the link in a new tab
+                        link.send_keys(Keys.CONTROL + Keys.RETURN)
+                
+                # Scroll to the top of the page
+                driver.execute_script("window.scrollTo(0, 0)")
+
+                # Click on the next page
+                click_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div/button[2]")
+                wait_for_page_load()
+
+                # Update the progress bar dynamicaly so that the loop equals to 50%
+                self.progressUpdated.emit(int((i+1)/(num_sites-1)*50))
                 
             ## Hier Überprüfung
             if self.with_check:
@@ -2671,49 +2834,30 @@ class UnclaimScreen(QWidget):
             
             else:
                 
+                # Iterate through the tabs
                 tabs = driver.window_handles
-                numberTabs = len(tabs)
-                
-                counter = 1
                 for i in tabs:
-                    driver.switch_to.window(i)
-                    try:
-                        clicker("/html/body/form/table[1]/tbody/tr/th/a")
-                        self.progressUpdated.emit(20 + (counter/numberTabs) * 20)
-                        print(counter/numberTabs * 20)
-                        counter += 1
-                    except:
-                        print("first tab1")
-                    
-                counter = 1
-                for i in tabs:
-                    driver.switch_to.window(i)
-                    try:
-                        clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a")
-                        self.progressUpdated.emit(40 + (counter/numberTabs) * 20)
-                        counter += 1
-                    except:
-                        print("first tab2")
-                    
-                counter = 1    
-                for i in tabs:
-                    driver.switch_to.window(i)
-                    try:
-                        clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input[1]")  
-                        self.progressUpdated.emit(60 + (counter/numberTabs) * 20)
-                        counter += 1
-                    except:
-                        print("first tab3")
-                
-                counter = 1    
-                for i in tabs:
-                    driver.switch_to.window(i)
-                    try:
-                        driver.switch_to.alert.accept()
-                        self.progressUpdated.emit(80 + (counter/numberTabs) * 20)
-                        counter += 1
-                    except:
-                        print("first tab4")
+                        
+                    if i != driver.window_handles[0]:
+                        try:
+                            # Switch to the tab
+                            driver.switch_to.window(i)
+                            driver.switch_to.parent_frame()
+                            
+                            # Click on the link to show the prospect overview
+                            click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
+                            wait_for_page_load()
+                            # Click on the unclaim button
+                            click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
+                            # Accept the alert
+                            driver.switch_to.alert.accept()  
+
+                        except Exception as e:
+                            print(e)
+                            print("Fehler beim Unclaimen")
+                        
+                        # Update the progress bar dynamicaly so that the loop equals to 100%
+                        self.progressUpdated.emit(int((tabs.index(i)+1)/len(tabs)*50)+50)
                     
                 driver.switch_to.window(driver.window_handles[0])
                 
@@ -2728,45 +2872,30 @@ class UnclaimScreen(QWidget):
             super().__init__()
             
         def run(self):
-            driver.switch_to.window(driver.window_handles[0])
-        
+            # Iterate through the tabs
             tabs = driver.window_handles
-            numberTabs = len(tabs)
-            
-            counter = 1
             for i in tabs:
-                driver.switch_to.window(i)
-                try:
-                    clicker("/html/body/form/table[1]/tbody/tr/th/a")
-                    self.progressUpdated.emit(counter/numberTabs * 40)
-                    counter += 1
-                except:
-                    print("first tab1")
-                
-            counter = 1
-            for i in tabs:
-                driver.switch_to.window(i)
-                try:
-                    clicker("//*[@id=\"main_container\"]/form/table[2]/tbody/tr/td[3]/div/span/span/a") 
-                    self.progressUpdated.emit(40 + counter/numberTabs * 30)
-                    counter += 1
-                except:
-                    print("first tab2")
-                
-            counter = 1
-            for i in tabs:
-                driver.switch_to.window(i)
-                try:
-                    clicker("//*[@id=\"main_container\"]/form/table[3]/tbody/tr/td/table[1]/tbody/tr/td[2]/input[1]")  
-                except:
-                    print("first tab3")
                     
-                try:
-                    driver.switch_to.alert.accept()
-                    self.progressUpdated.emit(70 + counter/numberTabs * 30)
-                    counter += 1
-                except:
-                    print("first tab4")
+                if i != driver.window_handles[0]:
+                    try:
+                        # Switch to the tab
+                        driver.switch_to.window(i)
+                        driver.switch_to.parent_frame()
+                        
+                        # Click on the link to show the prospect overview
+                        click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
+                        wait_for_page_load()
+                        # Click on the unclaim button
+                        click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
+                        # Accept the alert
+                        driver.switch_to.alert.accept()  
+
+                    except Exception as e:
+                        print(e)
+                        print("Fehler beim Unclaimen")
+
+                # Update the progress bar dynamicaly so that the loop equals to 100%
+                self.progressUpdated.emit(int((tabs.index(i)+1)/len(tabs)*100))
             
             self.progressUpdated.emit(100)
             self.finished.emit(len(driver.window_handles)-1)    
@@ -2802,8 +2931,8 @@ class UnclaimScreen(QWidget):
                 
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        driver.switch_to.frame("frame_menu")
-        clicker("/html/body/form/div/ul/li[1]")
+        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
+        self.parent().setCurrentIndex(1) 
         
         self.changeScreenCallback(1)
 
@@ -3026,14 +3155,14 @@ class MainWindow(QMainWindow):
                     search_trust = driver.find_element(By.XPATH, "/html/body/div/form/div/div[2]/div/div[10]/input[1]")
                     search_trust.click()
                     
-                    time.sleep(3)
+                    # time.sleep(3)
                     
                     driver.switch_to.parent_frame()
-                    driver.switch_to.frame("frame_menu")
+                    # driver.switch_to.frame("frame_menu")
                     
-                    XPATH = "/html/body/form/div/ul/li[11]"
+                    # XPATH = "/html/body/form/div/ul/li[11]"
                     
-                    test = driver.find_element(By.XPATH, XPATH)
+                    # test = driver.find_element(By.XPATH, XPATH)
                 
                     self.stackedWidget.setCurrentIndex(1)
                         
