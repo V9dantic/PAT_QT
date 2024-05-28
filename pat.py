@@ -795,12 +795,18 @@ class SearchScreen(QWidget):
         claimedLayout = QHBoxLayout()
         claimedbeforeLayout = QHBoxLayout()
         self.claimedLabel = QLabel('Zuletzt geclaimed:')
+        # Färbe das claimed Label grau, da es deaktiviert ist
+        self.claimedLabel.setStyleSheet("background-color: #D3D3D3;")
         self.claimedDropdown = QComboBox()
         self.applyShadow(self.claimedDropdown)
         self.claimedDropdown.addItems(["---", "3 Monaten", "6 Monaten", "1 Jahr", "3 Jahren", "5 Jahren"])
         claimedbeforeLayout.addWidget(self.claimedLabel)
         claimedbeforeLayout.addWidget(self.claimedDropdown)
         claimedLayout.setSpacing(5)
+
+        ### Deaktivieren des claimed Dropdowns ###
+        self.claimedDropdown.setEnabled(False)
+        
         neverClaimedLayout = QHBoxLayout()
         self.neverClaimedLabel = QLabel('Noch nie gelaimed')
         self.neverClaimedBox = QCheckBox()
@@ -836,6 +842,7 @@ class SearchScreen(QWidget):
         buttonsLayout.addWidget(nextButton)
         buttonsLayout.setSpacing(5)
         nextButton.clicked.connect(self.weiter)
+        backButton.clicked.connect(self.back)
         mainLayout.addLayout(buttonsLayout)
         mainLayout.setSpacing(75)
         
@@ -994,7 +1001,7 @@ class SearchScreen(QWidget):
     def back(self):
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
+        click_element("/html/body/div[1]/div/div[1]/div[1]/div/div/div[1]/a")
         
         self.parent().setCurrentIndex(1) 
 
