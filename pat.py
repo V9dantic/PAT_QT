@@ -674,16 +674,14 @@ class ChooseScreen(QWidget):
                 ### !!! Hier muss noch die richtige Schaltfläche ausgewählt werden !!! ###
 
                 ### Ohne Plugin ###
-                try:
-                    driver.switch_to.parent_frame()
-                    click_element_with_time("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a", 1)
-                    self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+                driver.switch_to.parent_frame()
+                click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+                self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
-                ## Mit Plugin ###
-                except:
-                    driver.switch_to.parent_frame()
-                    click_element_with_time("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a", 1)
-                    self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+                ### Mit Plugin ###
+                # driver.switch_to.parent_frame()
+                # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+                # self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
                 # Klicken auf Schaltfläche "Aktionen"
                 click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
