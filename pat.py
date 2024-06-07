@@ -16,6 +16,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.errorhandler import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException
 
 import mysql.connector
 import keyring
@@ -69,6 +70,12 @@ def click_element(xpath):
     )
     element.click()
 
+def click_element_with_time(xpath, time):
+    element = WebDriverWait(driver, time).until(
+        EC.element_to_be_clickable((By.XPATH, xpath))
+    )
+    element.click()
+
 # Methode zum senden von Text an ein Element unter Angabe des XPath. Dabei soll gewartet werden, bis das Element klickbar ist.
 def send_text(xpath, text):
     try:
@@ -95,13 +102,13 @@ def wait_for_element(xpath):
 
 # Methode zum Laden eines Elements unter Angabe des XPath
 def load_element(xpath):
-    try:
-        element = driver.find_element(By.XPATH, xpath)
-        return element
-    except:
-        print("Element nicht gefunden")
-        driver.quit()
-        sys.exit()
+    # try:
+    element = driver.find_element(By.XPATH, xpath)
+    return element
+    # except:
+    #     print("Element nicht gefunden")
+    #     driver.quit()
+    #     sys.exit()
 
 # Methode zum Warten bis die Seite vollständig geladen ist und die Hintergrundaktivitäten abgeschlossen sind
 def wait_for_page_load():
@@ -268,7 +275,11 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
                             driver.switch_to.parent_frame()
                             akt_relations.append(total_len + j)
                             geclaimt = False
-                            time.sleep(2)
+
+                            wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                            wait_for_page_load()
+                            time.sleep(1)
+                            wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                             wait_for_page_load()
                             
                             table = load_element("/html/body/div[1]/div/div[3]/div[2]")
@@ -282,40 +293,54 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
 
                                     informations = tables[-1].find_elements(By.TAG_NAME, "div")
                                     break
-                                
-                            if informations[0].text != "Available":
+                            try:  
+                                if informations[0].text != "Available":
 
-                                geclaimt = True
+                                    geclaimt = True
 
-                                # Scroll to the top of the page
-                                driver.execute_script("window.scrollTo(0, 0)")
+                                    # Scroll to the top of the page
+                                    driver.execute_script("window.scrollTo(0, 0)")
 
-                                # Get the mothers name
-                                mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
-                                mother_name = mother_name.text
+                                    # Get the mothers name
+                                    mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                    mother_name = mother_name.text
 
-                                # Get the status
-                                status = informations[0]
+                                    # Get the status
+                                    status = informations[0]
 
-                                # Get the partner
-                                partner = informations[6]
+                                    # Get the partner
+                                    partner = informations[6]
 
-                                # Get the days
-                                tage = informations[8]
+                                    # Get the days
+                                    tage = informations[8]
+                                    
+                                    if informations[0].text != "Client":
 
-                                if informations[0].text != "Client":
+                                        tage = int(''.join(filter(str.isdigit, tage.text)))
+                                        tage = datetime.today() - timedelta(days=tage)
+                                        tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
 
-                                    tage = int(''.join(filter(str.isdigit, tage.text)))
-                                    tage = datetime.today() - timedelta(days=tage)
-                                    tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
+                                    else:
+                                        # Get the status
+                                        status = informations[0]
 
-                                else:
+                                        # Get the partner
+                                        partner = informations[2]
 
-                                    tage = datetime.strptime(tage.text, '%Y-%m-%d')
+                                        # Get the days
+                                        tage = informations[4]
 
-                                mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"])], ignore_index=True)    
+                                        try:
+                                            tage = datetime.strptime(tage.text, '%Y-%m-%d')
+                                        except:
+                                            tage = datetime.today()
 
-                                # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+
+                                    mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=["Firma", "Tab", "Geclaimt", "Tochter", "Geclaimt/Client von", "Geclaimt/Client seit", "Status"])], ignore_index=True)    
+
+                                    # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+                            except:
+                                print("No ERA Status")
                             
                             if geclaimt == False:
                     
@@ -520,7 +545,7 @@ class LoginScreen(QWidget):
                     time.sleep(3)
                     
                     driver.switch_to.parent_frame()
-
+                    self.parent().setCurrentIndex(1)
                     ### Vielleicht noch das erfolgreiche Einloggen überprüfen ###
                         
                 except: 
@@ -645,10 +670,20 @@ class ChooseScreen(QWidget):
                 click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
                 self.progressUpdated.emit(30)  # Annahme: 30% Fortschritt
 
-                # Klicken auf Schaltfläche "Licensee Plugin
-                driver.switch_to.parent_frame()
-                click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
-                self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+                ### Klicken auf Schaltfläche "Licensee Plugin ###
+                ### !!! Hier muss noch die richtige Schaltfläche ausgewählt werden !!! ###
+
+                ### Ohne Plugin ###
+                try:
+                    driver.switch_to.parent_frame()
+                    click_element_with_time("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a", 1)
+                    self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+
+                ## Mit Plugin ###
+                except:
+                    driver.switch_to.parent_frame()
+                    click_element_with_time("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a", 1)
+                    self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
                 # Klicken auf Schaltfläche "Aktionen"
                 click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -680,7 +715,7 @@ class SearchScreen(QWidget):
         super().__init__()
         self.initUI()
         
-        self.never_claimed_pressed = False
+        # self.never_claimed_pressed = False
         self.last_claimed = "---"
         self.branche_claim = "---"
         
@@ -795,17 +830,12 @@ class SearchScreen(QWidget):
         claimedLayout = QHBoxLayout()
         claimedbeforeLayout = QHBoxLayout()
         self.claimedLabel = QLabel('Zuletzt geclaimed:')
-        # Färbe das claimed Label grau, da es deaktiviert ist
-        self.claimedLabel.setStyleSheet("background-color: #D3D3D3;")
         self.claimedDropdown = QComboBox()
         self.applyShadow(self.claimedDropdown)
         self.claimedDropdown.addItems(["---", "3 Monaten", "6 Monaten", "1 Jahr", "3 Jahren", "5 Jahren"])
         claimedbeforeLayout.addWidget(self.claimedLabel)
         claimedbeforeLayout.addWidget(self.claimedDropdown)
         claimedLayout.setSpacing(5)
-
-        ### Deaktivieren des claimed Dropdowns ###
-        self.claimedDropdown.setEnabled(False)
         
         neverClaimedLayout = QHBoxLayout()
         self.neverClaimedLabel = QLabel('Noch nie gelaimed')
@@ -927,10 +957,10 @@ class SearchScreen(QWidget):
         # Check for the box "Noch nie geclaimed"
         if  self.neverClaimedBox.isChecked() == False:
             
-            if self.never_claimed_pressed == True:
+            # if self.never_claimed_pressed == True:
                 
-                click_element("/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]")
-                self.never_claimed_pressed = False
+            #     click_element("/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]")
+            #     self.never_claimed_pressed = False
                 
             click_element("//*[@id=\"select_22\"]")
             
@@ -964,11 +994,15 @@ class SearchScreen(QWidget):
             XPATH = "//*[@id=\"select_option_54\"]"
             click_element(XPATH)
             
-            if self.never_claimed_pressed == False:
+            # if self.never_claimed_pressed == False:
                 
-                XPATH = "/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]"
-                click_element(XPATH)
-                self.never_claimed_pressed = True
+            #     XPATH = "/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]"
+            #     click_element(XPATH)
+            #     self.never_claimed_pressed = True
+
+            XPATH = "/html/body/div[1]/div/div[3]/div/block-single[3]/div/div/div/div[1]/div/div[14]/md-input-container/md-checkbox/div[1]"
+            click_element(XPATH)
+
             
         self.branche = self.industryDropdown.currentText()
         self.sendBranche.emit(self.branche)
@@ -1004,7 +1038,6 @@ class SearchScreen(QWidget):
         click_element("/html/body/div[1]/div/div[1]/div[1]/div/div/div[1]/a")
         
         self.parent().setCurrentIndex(1) 
-
 
 #Claim Screen        
 class ClaimScreen(QWidget):
@@ -1206,7 +1239,7 @@ class ClaimScreen(QWidget):
             self.start_button.setStyleSheet("QPushButton:hover { background-color: #333A73; }")
             
             try:
-                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")  
+                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                 wait_for_element("/html/body/div[1]/div/div[3]/div/block-multi[2]/div/p/span[4]")
                 number_of_results = load_element("/html/body/div[1]/div/div[3]/div/block-multi[2]/div/p/span[4]").text
                 
@@ -1221,8 +1254,12 @@ class ClaimScreen(QWidget):
                     click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
 
                     # Klicken auf Schaltfläche "Licensee Plugin
-                    driver.switch_to.parent_frame()
-                    click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+                    try:
+                        driver.switch_to.parent_frame()
+                        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+                    except:
+                        driver.switch_to.parent_frame()
+                        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
 
                     # Klicken auf Schaltfläche "Aktionen"
                     click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -1308,23 +1345,24 @@ class ClaimScreen(QWidget):
 
             tabs = driver.window_handles
             anzahl_prospects = 0
-            first_time = False
 
             for i in tabs:
                 driver.switch_to.window(i)
                 driver.switch_to.parent_frame()
 
-
                 if i != driver.window_handles[0]:
                     
                     anzahl_prospects += 1
-                    
-                    if first_time == False:
-                        time.sleep(3)
-                        wait_for_page_load()
-                        first_time = True
                 
-                    info_table = load_element("/html/body/div[1]/div/div[3]/div[1]/block-edit[1]/div")
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                    wait_for_page_load()
+
+                    try:
+                        info_table = load_element("/html/body/div[1]/div/div[3]/div[1]/block-edit[1]/div")
+                    except:
+                        print("Fehler beim Laden der Seite!")
+                        driver.close()
+                        continue
 
                     # Get the links
                     links = info_table.find_elements(By.TAG_NAME, "a")
@@ -1474,7 +1512,7 @@ class ClaimScreen(QWidget):
                                     driver.switch_to.parent_frame()
                                     akt_relations.append(total_len + j)
                                     geclaimt = False
-                                    time.sleep(2)
+                                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                                     wait_for_page_load()
                                     
                                     table = load_element("/html/body/div[1]/div/div[3]/div[2]")
@@ -1488,40 +1526,42 @@ class ClaimScreen(QWidget):
 
                                             informations = tables[-1].find_elements(By.TAG_NAME, "div")
                                             break
+                                    try:       
+                                        if informations[0].text != "Available":
 
-                                    if informations[0].text != "Available":
+                                            geclaimt = True
 
-                                        geclaimt = True
+                                            # Scroll to the top of the page
+                                            driver.execute_script("window.scrollTo(0, 0)")
 
-                                        # Scroll to the top of the page
-                                        driver.execute_script("window.scrollTo(0, 0)")
+                                            # Get the mothers name
+                                            mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
+                                            mother_name = mother_name.text
 
-                                        # Get the mothers name
-                                        mother_name = load_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[1]/span[1]")
-                                        mother_name = mother_name.text
+                                            # Get the status
+                                            status = informations[0]
 
-                                        # Get the status
-                                        status = informations[0]
+                                            # Get the partner
+                                            partner = informations[6]
 
-                                        # Get the partner
-                                        partner = informations[6]
+                                            # Get the days
+                                            tage = informations[8]
 
-                                        # Get the days
-                                        tage = informations[8]
+                                            if informations[0].text != "Client":
 
-                                        if informations[0].text != "Client":
+                                                tage = int(''.join(filter(str.isdigit, tage.text)))
+                                                tage = datetime.today() - timedelta(days=tage)
+                                                tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
 
-                                            tage = int(''.join(filter(str.isdigit, tage.text)))
-                                            tage = datetime.today() - timedelta(days=tage)
-                                            tage = tage.replace(hour=0, minute=0, second=0, microsecond=0)
+                                            else:
 
-                                        else:
+                                                tage = datetime.strptime(tage.text, '%Y-%m-%d')
 
-                                            tage = datetime.strptime(tage.text, '%Y-%m-%d')
+                                            mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=columns_m)], ignore_index=True)    
 
-                                        mothers = pd.concat([mothers, pd.DataFrame([[mother_name, total_len + j, True, name, partner.text, tage, status.text]], columns=columns_m)], ignore_index=True)    
-
-                                        # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+                                            # clicker("/html/body/div[2]/form/table[2]/tbody/tr/td[1]/span/span/a")
+                                    except:
+                                        print("No ERA Status")
                                     
                                     if geclaimt == False:
                             
@@ -1684,7 +1724,11 @@ class ClaimScreen(QWidget):
                             break
                             
                 if self.check_before_claim:
-                    self.progressUpdated.emit(90 + int((counter / (len(tabs)-1)) * 10))
+                    try:
+                        self.progressUpdated.emit(90 + int((counter / (len(tabs)-1)) * 10))
+                    except ZeroDivisionError:
+                        self.progressUpdated.emit(100)
+
                 else:
                     self.progressUpdated.emit(80 + int((counter / (len(tabs)-1)) * 10))
 
@@ -1710,22 +1754,56 @@ class ClaimScreen(QWidget):
 
                     if i != driver.window_handles[0]:
 
+                        ### Hier wird eine Exception für geclaimte Prospects ohne Vorgang gemacht
+                    
+                        try:
+                    
+                            # scroll to the top of the page
+                            driver.execute_script("window.scrollTo(0, 0)")
+
+                            # Return to the main page
+                            click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a", 1)
+                            
+                        except:
+                            
+                            print("Kein Vorgang")
+
                         click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[1]/input")
-                        time.sleep(3)
+                        time.sleep(1)
+                        wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                        wait_for_page_load()
+                        
+                        # Scroll to the bottom of the page
+                        driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+                        wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                         wait_for_page_load()
 
                         table = load_element("/html/body/div[1]/div/div[3]/div[2]")
                         sections = table.find_elements(By.TAG_NAME, "block-multi")
-
+                        
                         for section in sections:
                             if section.text.startswith("Sales"):
 
-                                links = section.find_elements(By.TAG_NAME, "a")
-                                break
+                                # Get elements by class name "tablerow"
+                                rows = section.find_elements(By.CLASS_NAME, "tablerow")
                                 
-                        # Click the second link
-                        links[3].click()
-                        
+                                for row in rows:
+                                    # Get row with the todays date
+                                    cells = row.find_elements(By.CLASS_NAME, "tablecell")
+                                    if cells[1].text == dt.datetime.today().strftime("%d.%m.%Y"):
+                                        #Find the link in the row
+                                        link = cells[0].find_element(By.TAG_NAME, "a")
+                                        print(link.text)
+                                        # Click the link
+                                        link.click()
+                                        break
+                                break
+
+                        driver.switch_to.parent_frame()
+
+                        wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                        wait_for_page_load()
+                            
                         click_element("/html/body/div[1]/div[3]/div[5]/block-multi[1]/div/p/span[5]/a")
                         send_text("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[4]/form/div/div/div[3]/md-input-container/div[1]/textarea", self.aktion)
                         click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[5]/form/div/div/div[6]/md-checkbox/div[1]")
@@ -1755,7 +1833,16 @@ class ClaimScreen(QWidget):
             self.last_claimed = last_claimed
             self.action_text = action_text
             self.status_text = status_text
-            
+
+        # Funktion zum Laden und Überprüfen der Elemente
+        def load_and_check_sections():
+            try:
+                table = driver.find_element(By.XPATH, "/html/body/div[1]/div/div[3]/div[2]")
+                sections = table.find_elements(By.TAG_NAME, "block-multi")
+                return sections
+            except StaleElementReferenceException:
+                return None
+
         def run(self):
             print("Continuation Thread started")
             driver.switch_to.window(driver.window_handles[0])
@@ -1789,14 +1876,19 @@ class ClaimScreen(QWidget):
                         driver.execute_script("window.scrollTo(0, 0)")
 
                         # Return to the main page
-                        click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
+                        click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a", 1)
                         
                     except:
                         
                         print("Kein Vorgang")
                         
                     click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[1]/input")
-                    time.sleep(3)
+                    time.sleep(1)
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                    wait_for_page_load()
+                    # Scroll to the bottom of the page
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                     wait_for_page_load()
 
                     table = load_element("/html/body/div[1]/div/div[3]/div[2]")
@@ -1805,14 +1897,24 @@ class ClaimScreen(QWidget):
                     for section in sections:
                         if section.text.startswith("Sales"):
 
-                            links = section.find_elements(By.TAG_NAME, "a")
+                            # Get elements by class name "tablerow"
+                            rows = section.find_elements(By.CLASS_NAME, "tablerow")
+                            
+                            for row in rows:
+                                # Get row with the todays date
+                                cells = row.find_elements(By.CLASS_NAME, "tablecell")
+                                if cells[1].text == dt.datetime.today().strftime("%d.%m.%Y"):
+                                    #Find the link in the row
+                                    link = cells[0].find_element(By.TAG_NAME, "a")
+                                    print(link.text)
+                                    # Click the link
+                                    link.click()
+                                    break
                             break
-            
-                    
-                    # Click the second link
-                    links[3].click()
 
-                    time.sleep(1)
+                    driver.switch_to.parent_frame()
+
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                     wait_for_page_load()
 
                     click_element("/html/body/div[1]/div[3]/div[5]/block-multi[1]/div/p/span[5]/a")
@@ -1842,8 +1944,12 @@ class ClaimScreen(QWidget):
         click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
 
         # Klicken auf Schaltfläche "Licensee Plugin
-        driver.switch_to.parent_frame()
-        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+        try:
+            driver.switch_to.parent_frame()
+            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+        except:
+            driver.switch_to.parent_frame()
+            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
 
         # Klicken auf Schaltfläche "Aktionen"
         click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -1998,8 +2104,32 @@ class FinishScreen(QWidget):
         
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        self.parent().setCurrentIndex(2)
+
+        # Logik, die ausgeführt wird, wenn der Zurück-Button geklickt wird
+        print('Zurück wurde geklickt')
         
+        # Klicken auf das Menü-Icon
+        click_element("//*[@id=\"menu\"]/div[1]/div/div/div[1]/a")
+        
+        # Klicken auf Schaltfläche "Mehr"
+        click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
+
+        # Klicken auf Schaltfläche "Licensee Plugin
+        try:
+            driver.switch_to.parent_frame()
+            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+        except:
+            driver.switch_to.parent_frame()
+            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+
+        # Klicken auf Schaltfläche "Aktionen"
+        click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
+
+        # Klicken auf soeben erschienene Schaltfläche "Available"
+        click_element("//*[@id=\"menu_container_8\"]/md-menu-content/md-menu-item[3]/button")
+
+        self.parent().setCurrentIndex(2)
+
     def export(self):
         
         tabs = driver.window_handles
@@ -2016,14 +2146,14 @@ class FinishScreen(QWidget):
         driver.switch_to.parent_frame()
         
         try:
-            click_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[2]/div[1]/div/md-menu/button")
+            click_element_with_time("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[2]/div[1]/div/md-menu/button", 1)
         except:
-            click_element("/html/body/div[1]/div/titlesection/div[1]/div/span[3]/div/md-menu/button")
+            click_element_with_time("/html/body/div[1]/div/titlesection/div[1]/div/span[3]/div/md-menu/button", 1)
 
         try:
-            click_element("/html/body/div[7]/md-menu-content/md-menu-item[4]/button")
+            click_element_with_time("/html/body/div[7]/md-menu-content/md-menu-item[4]/button", 1)
         except:
-            click_element("/html/body/div[8]/md-menu-content/md-menu-item[4]/button")
+            click_element_with_time("/html/body/div[8]/md-menu-content/md-menu-item[4]/button", 1)
 
         click_element("/html/body/div[1]/div/div[3]/div/block-edit/div/div[4]/form/div/div/div[2]/md-checkbox/div[1]")
         click_element("/html/body/div[1]/div/div[3]/div/block-edit/div/div[1]/span[3]/button[4]")
@@ -2783,12 +2913,34 @@ class UnclaimScreen(QWidget):
             driver.switch_to.window(driver.window_handles[0])
             driver.switch_to.parent_frame()
 
-            # Click on the "Todos" button
-            todo_button = load_element("/html/body/div/div[3]/div[3]/div/div[3]/div[2]/block-multi/div/p/span[1]/a/i")
-            driver.execute_script("arguments[0].click();", todo_button)
+            # # Click on the "Todos" button
+            # todo_button = load_element("/html/body/div/div[3]/div[3]/div/div[3]/div[2]/block-multi/div/p/span[1]/a/i")
+            # driver.execute_script("arguments[0].click();", todo_button)
+
+            # Find and click the "Todos" button
+
+            table = load_element("/html/body/div/div[3]/div[3]")
+            # Find sections by tag name "block-multi"
+            sections = table.find_elements(By.TAG_NAME, "block-multi")
+
+            # Iterate through the sections
+            for section in sections:
+                # If section starts with "Todos"
+                if section.text.startswith("Todos"):
+                    # Find the button and click it
+                    links = section.find_elements(By.TAG_NAME, "a")
+                    todo_button = links[0]
+                    driver.execute_script("arguments[0].click();", todo_button)
+                    break
+
+            time.sleep(1)
+
+            wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+            wait_for_page_load()
 
             # Load the element which contains the number of sites
             num_sites = load_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div")
+            print(num_sites.text)
 
             # Get the number of sites
             num_sites = int(num_sites.text.split(" / ")[-1])
@@ -2800,7 +2952,7 @@ class UnclaimScreen(QWidget):
             # Iterate through the sites
 
             for i in range(num_sites-1):
-
+                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                 wait_for_page_load()
                 
                 # Load the table
@@ -2829,6 +2981,7 @@ class UnclaimScreen(QWidget):
 
                 # Click on the next page
                 click_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div/button[2]")
+                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                 wait_for_page_load()
 
                 # Update the progress bar dynamicaly so that the loop equals to 50%
@@ -2851,9 +3004,15 @@ class UnclaimScreen(QWidget):
                             driver.switch_to.window(i)
                             driver.switch_to.parent_frame()
                             
+                            wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                            wait_for_page_load()
+                            
                             # Click on the link to show the prospect overview
                             click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
+
+                            wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                             wait_for_page_load()
+
                             # Click on the unclaim button
                             click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
                             # Accept the alert
@@ -3137,7 +3296,7 @@ class MainWindow(QMainWindow):
         self.stackedWidget.addWidget(self.unclaimScreen)
         self.stackedWidget.addWidget(self.loadingScreen)
         
-        ## Hier wird der automatische Login ausgeführt
+        ### Hier wird der automatische Login ausgeführt
         
         # Comment out the lines below to use manual login
         try:
