@@ -78,16 +78,11 @@ def click_element_with_time(xpath, time):
 
 # Methode zum senden von Text an ein Element unter Angabe des XPath. Dabei soll gewartet werden, bis das Element klickbar ist.
 def send_text(xpath, text):
-    try:
-        element = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
-        )
-        element.clear()
-        element.send_keys(text)
-    except TimeoutException:
-        print("Element nicht klickbar")
-        driver.quit()
-        sys.exit()
+    element = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, xpath))
+    )
+    element.clear()
+    element.send_keys(text)
 
 # Methode zum warten auf ein Element unter Angabe des XPath
 def wait_for_element(xpath):
@@ -254,8 +249,14 @@ def mother_search(start_len, total_len, daughters, mothers, adjust):
                                             
                                             anzahl_relations += 1
                                             link = cells[2].find_element(By.TAG_NAME, "a")
-                                            link.send_keys(Keys.CONTROL + Keys.RETURN)
-                                            repeat = True
+                                            try:
+                                                link.send_keys(Keys.CONTROL + Keys.RETURN) 
+                                                repeat = True
+                                            except:
+                                                # Firma ist irrelevant
+                                                print("Firma ist irrelevant")
+                                                anzahl_relations -= 1
+                                                continue
 
                                         else:
 
@@ -678,7 +679,7 @@ class ChooseScreen(QWidget):
                 click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
                 self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
-                ### Mit Plugin ###
+                # ### Mit Plugin ###
                 # driver.switch_to.parent_frame()
                 # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
                 # self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
@@ -1490,7 +1491,14 @@ class ClaimScreen(QWidget):
                                                     
                                                     anzahl_relations += 1
                                                     link = cells[2].find_element(By.TAG_NAME, "a")
-                                                    link.send_keys(Keys.CONTROL + Keys.RETURN)
+
+                                                    try:
+                                                        link.send_keys(Keys.CONTROL + Keys.RETURN)
+                                                    except:
+                                                        # Firma ist irrelevant
+                                                        print("Firma ist irrelevant")
+                                                        anzahl_relations -= 1
+                                                        continue
 
                                                 else:
 
@@ -1916,8 +1924,8 @@ class ClaimScreen(QWidget):
                     wait_for_page_load()
 
                     click_element("/html/body/div[1]/div[3]/div[5]/block-multi[1]/div/p/span[5]/a")
-                    send_text("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[4]/form/div/div/div[3]/md-input-container/div[1]/textarea", self.action_text)
-                    click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[5]/form/div/div/div[6]/md-checkbox/div[1]")
+                    send_text("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[6]/form/div/div/div[3]/md-input-container/div[1]/textarea", self.action_text)
+                    # click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[5]/form/div/div/div[6]/md-checkbox/div[1]")
                     click_element("/html/body/div[1]/div[3]/div[5]/block-edit[1]/div/div[1]/span[3]/button[4]")
                     
                     if self.status_text == "A - Prospect/AP qualifiziert":
@@ -1941,13 +1949,13 @@ class ClaimScreen(QWidget):
         # Klicken auf Schaltfläche "Mehr"
         click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
 
-        # Klicken auf Schaltfläche "Licensee Plugin
-        try:
-            driver.switch_to.parent_frame()
-            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
-        except:
-            driver.switch_to.parent_frame()
-            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+        ### Ohne Plugin ###   
+        driver.switch_to.parent_frame()
+        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+
+        # ### Mit Plugin ###
+        # driver.switch_to.parent_frame()
+        # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
 
         # Klicken auf Schaltfläche "Aktionen"
         click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -2113,12 +2121,14 @@ class FinishScreen(QWidget):
         click_element("//*[@id=\"menu\"]/div[2]/div/ul/li[6]/span[1]/a")
 
         # Klicken auf Schaltfläche "Licensee Plugin
-        try:
-            driver.switch_to.parent_frame()
-            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
-        except:
-            driver.switch_to.parent_frame()
-            click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+        
+        ### Ohne Plugin ###   
+        driver.switch_to.parent_frame()
+        click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+
+        # ### Mit Plugin ###
+        # driver.switch_to.parent_frame()
+        # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
 
         # Klicken auf Schaltfläche "Aktionen"
         click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -2174,8 +2184,7 @@ class FinishScreen(QWidget):
                 
         driver.switch_to.window(driver.window_handles[0])
         driver.switch_to.parent_frame()
-        click_element("/html/body/div/div[1]/div[1]/div/div/div[1]/a")
-        
+        click_element("/html/body/div[1]/div/div[1]/div[1]/div/div/div[1]/a")
         self.parent().setCurrentIndex(1) 
 
 # Export Screen
@@ -3296,47 +3305,47 @@ class MainWindow(QMainWindow):
         
         ### Hier wird der automatische Login ausgeführt
         
-        # Comment out the lines below to use manual login
-        try:
+        # # Comment out the lines below to use manual login
+        # try:
             
-            kr_user = keyring.get_password(service_id_user, MAGIC_USERNAME_KEY)
-            kr_pw = keyring.get_password(service_id_pass, MAGIC_USERNAME_KEY)
+        #     kr_user = keyring.get_password(service_id_user, MAGIC_USERNAME_KEY)
+        #     kr_pw = keyring.get_password(service_id_pass, MAGIC_USERNAME_KEY)
                         
-            if (keys["Partner"]==kr_user).any():
+        #     if (keys["Partner"]==kr_user).any():
                 
-                try:
+        #         try:
         
-                    driver.get("https://era.wice-net.de")
+        #             driver.get("https://era.wice-net.de")
                     
-                    searchLMM = driver.find_element(By.PARTIAL_LINK_TEXT, "Login mit Mandantennamen")
-                    searchLMM.click()
-                    search_mandant = driver.find_element(By.ID, "input_0")
-                    search_mandant.send_keys("era")
-                    search_email = driver.find_element(By.ID, "input_2")
-                    search_email.send_keys(kr_user)                                                                 ### Benutzernamen eingeben
-                    search_passwort = driver.find_element(By.ID, "input_4")
-                    search_passwort.send_keys(kr_pw)                                                                  ### Passwort eingeben
-                    search_trust = driver.find_element(By.XPATH, "/html/body/div/form/div/div[2]/div/div[10]/input[1]")
-                    search_trust.click()
+        #             searchLMM = driver.find_element(By.PARTIAL_LINK_TEXT, "Login mit Mandantennamen")
+        #             searchLMM.click()
+        #             search_mandant = driver.find_element(By.ID, "input_0")
+        #             search_mandant.send_keys("era")
+        #             search_email = driver.find_element(By.ID, "input_2")
+        #             search_email.send_keys(kr_user)                                                                 ### Benutzernamen eingeben
+        #             search_passwort = driver.find_element(By.ID, "input_4")
+        #             search_passwort.send_keys(kr_pw)                                                                  ### Passwort eingeben
+        #             search_trust = driver.find_element(By.XPATH, "/html/body/div/form/div/div[2]/div/div[10]/input[1]")
+        #             search_trust.click()
                     
-                    # time.sleep(3)
+        #             # time.sleep(3)
                     
-                    driver.switch_to.parent_frame()
-                    # driver.switch_to.frame("frame_menu")
+        #             driver.switch_to.parent_frame()
+        #             # driver.switch_to.frame("frame_menu")
                     
-                    # XPATH = "/html/body/form/div/ul/li[11]"
+        #             # XPATH = "/html/body/form/div/ul/li[11]"
                     
-                    # test = driver.find_element(By.XPATH, XPATH)
+        #             # test = driver.find_element(By.XPATH, XPATH)
                 
-                    self.stackedWidget.setCurrentIndex(1)
+        #             self.stackedWidget.setCurrentIndex(1)
                         
-                except: 
-                    search_mandant.clear()
-                    search_email.clear()
-                    search_passwort.clear()
+        #         except: 
+        #             search_mandant.clear()
+        #             search_email.clear()
+        #             search_passwort.clear()
                     
-        except:
-            print("Kein Passwort gefunden!")
+        # except:
+        #     print("Kein Passwort gefunden!")
         
     def setCurrentIndex(self, index):
         self.stackedWidget.setCurrentIndex(index)
