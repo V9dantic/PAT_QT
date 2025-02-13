@@ -35,6 +35,7 @@ options.add_argument("--disable-gpu")
 # Starte den Chrome Webdriver
 driver = webdriver.Chrome(options=options)
 
+print("Chrome Webdriver gestartet")
 ### Verbindung zur Datenbank herstellen ###
 # Establish a connection to the MySQL database
 cnx = mysql.connector.connect(
@@ -43,6 +44,9 @@ cnx = mysql.connector.connect(
   password="edXuG1adnR",
   database="sql7652773"
 )
+
+print("Verbindung zur Datenbank hergestellt")
+
 cursor = cnx.cursor()
 table_name = "PAT_Keys"
 query = f"SELECT * FROM {table_name}"
@@ -3305,47 +3309,47 @@ class MainWindow(QMainWindow):
         
         ### Hier wird der automatische Login ausgeführt
         
-        # # Comment out the lines below to use manual login
-        # try:
+        # Comment out the lines below to use manual login
+        try:
             
-        #     kr_user = keyring.get_password(service_id_user, MAGIC_USERNAME_KEY)
-        #     kr_pw = keyring.get_password(service_id_pass, MAGIC_USERNAME_KEY)
+            kr_user = keyring.get_password(service_id_user, MAGIC_USERNAME_KEY)
+            kr_pw = keyring.get_password(service_id_pass, MAGIC_USERNAME_KEY)
                         
-        #     if (keys["Partner"]==kr_user).any():
+            if (keys["Partner"]==kr_user).any():
                 
-        #         try:
+                try:
         
-        #             driver.get("https://era.wice-net.de")
+                    driver.get("https://era.wice-net.de")
                     
-        #             searchLMM = driver.find_element(By.PARTIAL_LINK_TEXT, "Login mit Mandantennamen")
-        #             searchLMM.click()
-        #             search_mandant = driver.find_element(By.ID, "input_0")
-        #             search_mandant.send_keys("era")
-        #             search_email = driver.find_element(By.ID, "input_2")
-        #             search_email.send_keys(kr_user)                                                                 ### Benutzernamen eingeben
-        #             search_passwort = driver.find_element(By.ID, "input_4")
-        #             search_passwort.send_keys(kr_pw)                                                                  ### Passwort eingeben
-        #             search_trust = driver.find_element(By.XPATH, "/html/body/div/form/div/div[2]/div/div[10]/input[1]")
-        #             search_trust.click()
+                    searchLMM = driver.find_element(By.PARTIAL_LINK_TEXT, "Login mit Mandantennamen")
+                    searchLMM.click()
+                    search_mandant = driver.find_element(By.ID, "input_0")
+                    search_mandant.send_keys("era")
+                    search_email = driver.find_element(By.ID, "input_2")
+                    search_email.send_keys(kr_user)                                                                 ### Benutzernamen eingeben
+                    search_passwort = driver.find_element(By.ID, "input_4")
+                    search_passwort.send_keys(kr_pw)                                                                  ### Passwort eingeben
+                    search_trust = driver.find_element(By.XPATH, "/html/body/div/form/div/div[2]/div/div[10]/input[1]")
+                    search_trust.click()
                     
-        #             # time.sleep(3)
+                    # time.sleep(3)
                     
-        #             driver.switch_to.parent_frame()
-        #             # driver.switch_to.frame("frame_menu")
+                    driver.switch_to.parent_frame()
+                    # driver.switch_to.frame("frame_menu")
                     
-        #             # XPATH = "/html/body/form/div/ul/li[11]"
+                    # XPATH = "/html/body/form/div/ul/li[11]"
                     
-        #             # test = driver.find_element(By.XPATH, XPATH)
+                    # test = driver.find_element(By.XPATH, XPATH)
                 
-        #             self.stackedWidget.setCurrentIndex(1)
+                    self.stackedWidget.setCurrentIndex(1)
                         
-        #         except: 
-        #             search_mandant.clear()
-        #             search_email.clear()
-        #             search_passwort.clear()
+                except: 
+                    search_mandant.clear()
+                    search_email.clear()
+                    search_passwort.clear()
                     
-        # except:
-        #     print("Kein Passwort gefunden!")
+        except:
+            print("Kein Passwort gefunden!")
         
     def setCurrentIndex(self, index):
         self.stackedWidget.setCurrentIndex(index)
