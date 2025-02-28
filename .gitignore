@@ -1,0 +1,5 @@
+build/
+dist/
+.venv/
+Old/
+pat_old.spec
