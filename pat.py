@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButto
 from PyQt5.QtCore import QEvent, Qt, QSize, QRect, QThread, pyqtSignal, QTimer, pyqtSlot
 from PyQt5.QtGui import QPixmap, QIcon, QFont, QColor
 
+# Importiere QStyle für Logos
+from PyQt5.QtWidgets import QStyle, QStyleFactory
+
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -72,6 +75,23 @@ def click_element(xpath):
     element = WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.XPATH, xpath))
     )
+    element.click()
+
+# Methode zum Klicken eines Elements unter Angabe des XPath. Dabei zu dem Element bewegt werden, falls es nicht sichtbar ist.
+def action_click_element(xpath):
+    try:
+        element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath))
+        )
+        driver.execute_script("arguments[0].scrollIntoView();", element)
+        element.click()
+    except StaleElementReferenceException:
+        print("Stale Element Reference Exception: Element is no longer attached to the DOM.")
+
+def click_element_plugin(xpath):
+    element = WebDriverWait(driver, 3).until(
+        EC.element_to_be_clickable((By.XPATH, xpath))
+)
     element.click()
 
 def click_element_with_time(xpath, time):
@@ -684,9 +704,14 @@ class ChooseScreen(QWidget):
                 self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
 
                 # ### Mit Plugin ###
-                # driver.switch_to.parent_frame()
-                # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
-                # self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+                # try:
+                #     driver.switch_to.parent_frame()
+                #     click_element_plugin("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+                #     self.progressUpdated.emit(50)  # Annahme: 50% Fortschritt
+                # except:
+                #     driver.switch_to.parent_frame()
+                #     click_element_plugin("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
+                #     self.progressUpdated.emit(50)
 
                 # Klicken auf Schaltfläche "Aktionen"
                 click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -1391,7 +1416,7 @@ class ClaimScreen(QWidget):
                     # Gebe das letzte Jahr aus
                     print(f"Das letzte Jahr, in dem ein Update stattgefunden hat, ist {years[-1]}")
 
-                    if int(years[-1]) < 2024:
+                    if int(years[-1]) < 2025:
                         # Schließe den Tab
                         driver.close()
                                     
@@ -1440,7 +1465,7 @@ class ClaimScreen(QWidget):
 
                     # Iterate through the sections
                     for section in sections:
-                        if section.text.startswith("Zusatzfelder"):
+                        if section.text.startswith("Details"):
                             # Get the rows of the section
                             rows = section.find_elements(By.TAG_NAME, "div")
                             # Iterate through the rows
@@ -1772,7 +1797,7 @@ class ClaimScreen(QWidget):
                             driver.execute_script("window.scrollTo(0, 0)")
 
                             # Return to the main page
-                            click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a", 1)
+                            click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[10]/div/div[1]/div[1]/a", 1)
                             
                         except:
                             
@@ -1886,7 +1911,7 @@ class ClaimScreen(QWidget):
                         driver.execute_script("window.scrollTo(0, 0)")
 
                         # Return to the main page
-                        click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a", 1)
+                        click_element_with_time("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[10]/div/div[1]/div[1]/a", 1)
                         
                     except:
                         
@@ -1958,8 +1983,12 @@ class ClaimScreen(QWidget):
         click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
 
         # ### Mit Plugin ###
-        # driver.switch_to.parent_frame()
-        # click_element("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+        # try:
+        #     driver.switch_to.parent_frame()
+        #     click_element_plugin("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div[2]/a")
+        # except:
+        #     driver.switch_to.parent_frame()
+        #     click_element_plugin("/html/body/div[1]/div[3]/div[2]/block-single[2]/div/div/div/div/a")
 
         # Klicken auf Schaltfläche "Aktionen"
         click_element("//*[@id=\"titlesection\"]/div[1]/div[2]/div[1]/div/md-menu/button")
@@ -2158,7 +2187,7 @@ class FinishScreen(QWidget):
         driver.switch_to.parent_frame()
         
         try:
-            click_element_with_time("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[2]/div[1]/div/md-menu/button", 1)
+            action_click_element("/html/body/div[1]/div/titlesection/div[2]/div[1]/div[2]/div[1]/div/md-menu/button")
         except:
             click_element_with_time("/html/body/div[1]/div/titlesection/div[1]/div/span[3]/div/md-menu/button", 1)
 
@@ -2920,54 +2949,101 @@ class UnclaimScreen(QWidget):
             
         def run(self):
             ### Unclaim Prospects ###
+            import re  # Add this import for regex pattern matching
 
             driver.switch_to.window(driver.window_handles[0])
             driver.switch_to.parent_frame()
 
-            # # Click on the "Todos" button
-            # todo_button = load_element("/html/body/div/div[3]/div[3]/div/div[3]/div[2]/block-multi/div/p/span[1]/a/i")
-            # driver.execute_script("arguments[0].click();", todo_button)
-
             # Find and click the "Todos" button
+            try:
+                # Look for navigation elements that contain "Todos"
+                nav_elements = driver.find_elements(By.XPATH, "//a[contains(text(), 'Todos')]")
+                
+                # Click on the first matching element
+                if nav_elements:
+                    driver.execute_script("arguments[0].click();", nav_elements[0])
+                else:
+                    # Fallback to the old method if no direct "Todos" link found
+                    table = load_element("/html/body/div/div[3]/div[3]")
+                    # Find sections by tag name "block-multi"
+                    sections = table.find_elements(By.TAG_NAME, "block-multi")
 
-            table = load_element("/html/body/div/div[3]/div[3]")
-            # Find sections by tag name "block-multi"
-            sections = table.find_elements(By.TAG_NAME, "block-multi")
-
-            # Iterate through the sections
-            for section in sections:
-                # If section starts with "Todos"
-                if section.text.startswith("Todos"):
-                    # Find the button and click it
-                    links = section.find_elements(By.TAG_NAME, "a")
-                    todo_button = links[0]
-                    driver.execute_script("arguments[0].click();", todo_button)
-                    break
+                    # Iterate through the sections
+                    for section in sections:
+                        # If section starts with "Todos"
+                        if section.text.startswith("Todos"):
+                            # Find the button and click it
+                            links = section.find_elements(By.TAG_NAME, "a")
+                            todo_button = links[0]
+                            driver.execute_script("arguments[0].click();", todo_button)
+                            break
+            except Exception as e:
+                print(f"Error finding Todos button: {e}")
+                # Try alternative method
+                try:
+                    driver.find_element(By.XPATH, "//a[contains(@href, 'todolist')]").click()
+                except:
+                    print("Could not find Todos button with alternative method either.")
 
             time.sleep(1)
 
             wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
             wait_for_page_load()
 
-            # Load the element which contains the number of sites
-            num_sites = load_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div")
-            print(num_sites.text)
-
-            # Get the number of sites
-            num_sites = int(num_sites.text.split(" / ")[-1])
+            # Wait for the page to load
+            time.sleep(2)
+            
+            # Try different methods to find pagination information
+            try:
+                # First try with the new structure
+                pagination_info = driver.find_element(By.XPATH, "//*[contains(text(), ' / ') and contains(@class, 'pagination') or contains(@class, 'paging')]")
+                page_text = pagination_info.text
+                
+                # If found, extract the number
+                if " / " in page_text:
+                    num_sites = int(page_text.split(" / ")[-1])
+                else:
+                    # Try to find any element with page numbers
+                    paging_elements = driver.find_elements(By.XPATH, "//*[contains(@class, 'page') or contains(@class, 'pagination')]")
+                    if paging_elements:
+                        # Look for the maximum page number
+                        page_nums = []
+                        for el in paging_elements:
+                            text = el.text
+                            # Extract numbers from text
+                            numbers = re.findall(r'\d+', text)
+                            page_nums.extend([int(n) for n in numbers])
+                        
+                        if page_nums:
+                            num_sites = max(page_nums)
+                        else:
+                            num_sites = 1  # Default to 1 page if no numbers found
+                    else:
+                        num_sites = 1  # Default to 1 page
+            
+            except Exception as e:
+                print(f"Error finding pagination: {e}")
+                
+                # Fallback to the old method
+                try:
+                    num_sites_element = load_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div")
+                    num_sites = int(num_sites_element.text.split(" / ")[-1])
+                except:
+                    print("Could not determine number of pages, defaulting to 1")
+                    num_sites = 1
+                    
             print(f"Anzahl der Seiten: {num_sites}")
 
             driver.switch_to.window(driver.window_handles[0])
             driver.switch_to.parent_frame()
 
             # Iterate through the sites
-
-            for i in range(num_sites-1):
+            for i in range(num_sites):
                 wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                 wait_for_page_load()
                 
-                # Load the table
-                todo_table = load_element("/html/body/div/div[3]/div/block-multi/div/div[2]")
+                # Load the table - using the new structure with div.pure-table-horizontal
+                todo_table = driver.find_element(By.CLASS_NAME, "pure-table-horizontal")
 
                 # Get the rows of the table by class name "tablerow"
                 rows = todo_table.find_elements(By.CLASS_NAME, "tablerow")
@@ -2978,37 +3054,65 @@ class UnclaimScreen(QWidget):
                     # Get the cells of the row by class name "tablecell"
                     cells = row.find_elements(By.CLASS_NAME, "tablecell")
 
-                    # Check if the cells text starts with "Kein Interesse (Out), bitte unclaimen"
-                    if cells[-2].text.startswith("Kein Interesse (Out), bitte unclaimen"):
+                    # The Text cell is now the 5th cell (index 4)
+                    if len(cells) > 4:
+                        text_cell = cells[4]
                         
-                        # get the link of the cell
-                        link = cells[-2].find_element(By.TAG_NAME, "a")
-
-                        # Open the link in a new tab
-                        link.send_keys(Keys.CONTROL + Keys.RETURN)
+                        # Check various text patterns that require unclaiming
+                        if (text_cell.text.startswith("Kein Interesse (Out), bitte unclaimen") or
+                            "Blacklist, darf nicht mehr kontaktiert werden" in text_cell.text):
+                            
+                            # Find the link in the cell (Vorgang link)
+                            try:
+                                link = text_cell.find_element(By.TAG_NAME, "a")
+                                # Open the link in a new tab
+                                link.send_keys(Keys.CONTROL + Keys.RETURN)
+                            except Exception as e:
+                                print(f"Error finding or clicking link in text cell: {e}")
                 
                 # Scroll to the top of the page
                 driver.execute_script("window.scrollTo(0, 0)")
 
-                # Click on the next page
-                click_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div/button[2]")
-                wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
-                wait_for_page_load()
+                # Try to click on the next page button if not on the last page
+                if i < num_sites - 1:
+                    try:
+                        # Look for pagination controls using various selectors
+                        next_buttons = driver.find_elements(By.XPATH, 
+                            "//button[contains(@class, 'next') or contains(text(), '»') or contains(text(), 'Next') or contains(text(), 'Weiter')]")
+                        if next_buttons:
+                            driver.execute_script("arguments[0].click();", next_buttons[0])
+                        else:
+                            # Try to find pagination buttons and click the "next" one
+                            pagination_buttons = driver.find_elements(By.XPATH, 
+                                "//div[contains(@class, 'pagination') or contains(@class, 'paging')]//button")
+                            if len(pagination_buttons) >= 2:
+                                driver.execute_script("arguments[0].click();", pagination_buttons[1])
+                            else:
+                                # Fallback to a generic XPath
+                                click_element("/html/body/div/div[3]/div/block-multi/div/div[1]/div[2]/div/button[2]")
+                    except Exception as e:
+                        print(f"Error clicking next page button: {e}")
+                        try:
+                            # Last attempt with a generic selector
+                            driver.find_element(By.CSS_SELECTOR, "[aria-label='Next page']").click()
+                        except:
+                            print("Could not find next page button with any method")
+                    
+                    wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                    wait_for_page_load()
 
-                # Update the progress bar dynamicaly so that the loop equals to 50%
-                self.progressUpdated.emit(int((i+1)/(num_sites-1)*50))
+                # Update the progress bar dynamically
+                self.progressUpdated.emit(int((i+1)/num_sites*50))
                 
-            ## Hier Überprüfung
+            ## Check or directly unclaim
             if self.with_check:
                 self.progressUpdated.emit(100)
                 self.finished.emit(len(driver.window_handles)-1)
             
             else:
-                
-                # Iterate through the tabs
+                # Process all opened tabs for unclaiming
                 tabs = driver.window_handles
                 for i in tabs:
-                        
                     if i != driver.window_handles[0]:
                         try:
                             # Switch to the tab
@@ -3018,22 +3122,54 @@ class UnclaimScreen(QWidget):
                             wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                             wait_for_page_load()
                             
-                            # Click on the link to show the prospect overview
-                            click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
-
+                            # Try to navigate to prospect detail view
+                            try:
+                                # Look for links to the detail view
+                                overview_links = driver.find_elements(By.XPATH, 
+                                    "//a[contains(text(), 'Detail') or contains(@href, 'detailview')]")
+                                if overview_links:
+                                    driver.execute_script("arguments[0].click();", overview_links[0])
+                                else:
+                                    click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[10]/div/div[1]/div[1]/a")
+                            except Exception as e:
+                                print(f"Error finding prospect overview link: {e}")
+                                try:
+                                    driver.find_element(By.XPATH, 
+                                        "//a[contains(@class, 'detail') or contains(@class, 'overview')]").click()
+                                except:
+                                    print("Could not find prospect overview link with any method")
+                                    
                             wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                             wait_for_page_load()
 
-                            # Click on the unclaim button
-                            click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
-                            # Accept the alert
-                            driver.switch_to.alert.accept()  
+                            # Find and click the unclaim button
+                            try:
+                                # Look for unclaim button with various attributes
+                                unclaim_buttons = driver.find_elements(By.XPATH, 
+                                    "//input[contains(@value, 'unclaim') or contains(@title, 'unclaim') or contains(@onclick, 'unclaim')]")
+                                if unclaim_buttons:
+                                    driver.execute_script("arguments[0].click();", unclaim_buttons[0])
+                                else:
+                                    # Try buttons in table structure
+                                    table_buttons = driver.find_elements(By.XPATH, "//table//input[@type='button']")
+                                    if table_buttons and len(table_buttons) >= 2:
+                                        driver.execute_script("arguments[0].click();", table_buttons[1])
+                                    else:
+                                        click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
+                            except Exception as e:
+                                print(f"Error finding unclaim button: {e}")
+                                
+                            # Accept the alert if present
+                            try:
+                                driver.switch_to.alert.accept()
+                            except Exception as e:
+                                print(f"No alert present or error accepting alert: {e}")
 
                         except Exception as e:
                             print(e)
                             print("Fehler beim Unclaimen")
                         
-                        # Update the progress bar dynamicaly so that the loop equals to 100%
+                        # Update the progress bar
                         self.progressUpdated.emit(int((tabs.index(i)+1)/len(tabs)*50)+50)
                     
                 driver.switch_to.window(driver.window_handles[0])
@@ -3045,8 +3181,9 @@ class UnclaimScreen(QWidget):
         progressUpdated = pyqtSignal(int)
         finished = pyqtSignal(int)
         
-        def __init__(self):
+        def __init__(self, with_check=False):
             super().__init__()
+            self.with_check = with_check
             
         def run(self):
             # Iterate through the tabs
@@ -3059,23 +3196,64 @@ class UnclaimScreen(QWidget):
                         driver.switch_to.window(i)
                         driver.switch_to.parent_frame()
                         
-                        # Click on the link to show the prospect overview
-                        click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[9]/div/div[1]/div[1]/a")
+                        wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
                         wait_for_page_load()
-                        # Click on the unclaim button
-                        click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
-                        # Accept the alert
-                        driver.switch_to.alert.accept()  
+                        
+                        # Try to navigate to prospect detail view
+                        try:
+                            # Look for links to the detail view
+                            overview_links = driver.find_elements(By.XPATH, 
+                                "//a[contains(text(), 'Detail') or contains(@href, 'detailview')]")
+                            if overview_links:
+                                driver.execute_script("arguments[0].click();", overview_links[0])
+                            else:
+                                # Try the specific XPath
+                                click_element("/html/body/div[1]/div[3]/div[4]/block-edit[1]/div/div[10]/div/div[1]/div[1]/a")
+                        except Exception as e:
+                            print(f"Error finding prospect overview link: {e}")
+                            try:
+                                # Try a more generic approach
+                                driver.find_element(By.XPATH, 
+                                    "//a[contains(@class, 'detail') or contains(@class, 'overview')]").click()
+                            except:
+                                print("Could not find prospect overview link with any method")
+                        
+                        wait_for_hidden("//*[@id=\"menu\"]/div[1]/div/div/div[3]")
+                        wait_for_page_load()
+                        
+                        # Find and click the unclaim button
+                        try:
+                            # Look for unclaim button with various attributes
+                            unclaim_buttons = driver.find_elements(By.XPATH, 
+                                "//input[contains(@value, 'unclaim') or contains(@title, 'unclaim') or contains(@onclick, 'unclaim')]")
+                            if unclaim_buttons:
+                                driver.execute_script("arguments[0].click();", unclaim_buttons[0])
+                            else:
+                                # Try buttons in table structure
+                                table_buttons = driver.find_elements(By.XPATH, "//table//input[@type='button']")
+                                if table_buttons and len(table_buttons) >= 2:
+                                    driver.execute_script("arguments[0].click();", table_buttons[1])
+                                else:
+                                    # Try the specific XPath
+                                    click_element("/html/body/div[1]/div/div[3]/div[2]/div/div/div/block-single/div/div/div/table/tbody/tr/td[2]/span[2]/input")
+                        except Exception as e:
+                            print(f"Error finding unclaim button: {e}")
+                        
+                        # Accept the alert if present
+                        try:
+                            driver.switch_to.alert.accept()
+                        except Exception as e:
+                            print(f"No alert present or error accepting alert: {e}")
 
                     except Exception as e:
                         print(e)
                         print("Fehler beim Unclaimen")
 
-                # Update the progress bar dynamicaly so that the loop equals to 100%
+                # Update the progress bar dynamically so that the loop equals to 100%
                 self.progressUpdated.emit(int((tabs.index(i)+1)/len(tabs)*100))
             
             self.progressUpdated.emit(100)
-            self.finished.emit(len(driver.window_handles)-1)    
+            self.finished.emit(len(driver.window_handles)-1)
         
     def applyShadow(self, widget):
         shadow = QGraphicsDropShadowEffect()
@@ -3280,6 +3458,16 @@ class MainWindow(QMainWindow):
 
         self.stackedWidget = QStackedWidget(self)
         self.setCentralWidget(self.stackedWidget)
+
+        # Einsetzen eines passenden Icons in die Titelleiste wie ein Roboter oder ein Internet-Icon
+        # Versuch, ein Standard-Icon zu verwenden
+        style = self.style()
+        icon = style.standardIcon(QStyle.SP_FileDialogContentsView)
+        if not icon.isNull():
+            self.setWindowIcon(icon)
+        else:
+            # Fallback, falls kein Standard-Icon gefunden wird (unwahrscheinlich für SP_ComputerIcon)
+            print("Standard-Icon konnte nicht geladen werden.")
         
         # Signal verbinden
         self.stackedWidget.currentChanged.connect(self.on_screen_changed)
@@ -3469,7 +3657,7 @@ class MainWindow(QMainWindow):
             self.unclaimScreen.startAutomationCallback = self.unclaimScreenAutomation_weiter
     
     def unclaimScreenAutomation_weiter(self):
-        self.automationThread = self.unclaimScreen.AutomationThread_U(self.unclaimScreen.checkBeforeUnclaim.isChecked())
+        self.automationThread = self.unclaimScreen.AutomationThread_W(self.unclaimScreen.checkBeforeUnclaim.isChecked())
         self.automationThread.progressUpdated.connect(self.updateProgress)
         self.automationThread.finished.connect(self.onAutomationComplete_unclaim)
         self.loadingScreen.setRange(100)

@@ -1,17 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['pat.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['pkg_resources', 'pkg_resources.extern'],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=True,
+    noarchive=False,
 )
 pyz = PYZ(a.pure)
 
@@ -20,9 +19,9 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    [('v', None, 'OPTION')],
+    [],
     name='PAT - Prospecting Automation Tool',
-    debug=True,
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
