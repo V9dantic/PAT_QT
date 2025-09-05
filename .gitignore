@@ -1,6 +1,6 @@
 build/
 build/pat/
-build
+build\
 dist/
 .venv/
 Old/
