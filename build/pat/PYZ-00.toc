@@ -1,1 +1,0 @@
-('D:\\CVR\\PAT\\build\\pat\\PYZ-00.pyz', [])
