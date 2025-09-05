@@ -1,7 +1,52 @@
+# Build artifacts
 build/
 build/pat/
 build\
 dist/
+*.exe
+*.pkg
+
+# Python virtual environment
 .venv/
+venv/
+env/
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Legacy/backup files  
 Old/
 pat_old.spec
+
+# Secret scan and cleanup artifacts
+secret-scan-*.txt
+cleanup-patterns.txt
+forensic-backup/
+handover-work-*/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

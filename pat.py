@@ -5,6 +5,11 @@ import threading
 import datetime as dt
 from datetime import datetime, timedelta
 import re
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect, QMainWindow, QStackedWidget,QSizePolicy, QComboBox, QCheckBox, QSlider, QRadioButton, QFileDialog, QTableWidget, QTableWidgetItem, QProgressBar, QHeaderView
 from PyQt5.QtCore import QEvent, Qt, QSize, QRect, QThread, pyqtSignal, QTimer, pyqtSlot
@@ -42,10 +47,10 @@ print("Chrome Webdriver gestartet")
 ### Verbindung zur Datenbank herstellen ###
 # Establish a connection to the MySQL database
 cnx = mysql.connector.connect(
-  host="sql7.freemysqlhosting.net",
-  user="sql7652773",
-  password="edXuG1adnR",
-  database="sql7652773"
+  host=os.getenv('DB_HOST', 'localhost'),
+  user=os.getenv('DB_USER', 'root'),
+  password=os.getenv('DB_PASSWORD', ''),
+  database=os.getenv('DB_NAME', '')
 )
 
 print("Verbindung zur Datenbank hergestellt")
